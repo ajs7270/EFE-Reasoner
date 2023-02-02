@@ -114,9 +114,9 @@ class Equation:
 
 
 class Problem:
-    def __init__(self, context: str, question : str, numbers: list[str], equation: Equation):
-        self.context = context
-        self.question = question
+    def __init__(self, problem: str, numbers: list[str], equation: Equation):
+        self.context = None
+        self.question = None
         self.numbers = numbers
         self.equation = equation.getList()
         self.golden_op = equation.getOperator()
@@ -124,6 +124,12 @@ class Problem:
 
         problem = self.toNumProblem(problem)
         self.context, self.question = problem2CQ(problem)
+
+    def toNumProblem(self, problem: str) -> str:
+        for i, n in enumerate(self.numbers):
+            problem = problem.replace(n, f"number{i}")
+
+        return problem
 
     def __repr__(self):
         return f"Problem(context={self.context}, question={self.question}, " \
@@ -167,11 +173,11 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
             data = json.load(f)
             print(f"number of problems: {len(data)}")
             for problem in data:
-                context, question = problem2CQ(problem["Problem"])
+                problem_text, problem["Problem"]
                 numbers = extractNum(problem["Problem"])
                 equation = Equation(problem["linear_formula"])
 
-                problem = Problem(context, question, numbers, equation)
+                problem = Problem(problem_text, numbers, equation)
                 problem_list.append(problem)
 
         processed_path = Path(BASE_PATH, save_path, f"{path.stem}_preprocessed.json")
@@ -197,12 +203,11 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
 
         print(f"number of problems: {len(data)}")
         for problem in data.itertuples():
-            context = problem.Body
-            question = problem.Ques
+            problem_text = problem.Qutestino
             numbers = problem.Numbers
             equation = Equation(problem.Equation, type="prefix")
 
-            problem = Problem(context, question, numbers, equation)
+            problem = Problem(problem_text, numbers, equation)
             problem_list.append(problem)
 
         processed_path = Path(BASE_PATH, save_path, f"{path.stem}_preprocessed.json")
