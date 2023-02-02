@@ -1,5 +1,5 @@
 from unittest import TestCase
-from preprocess import extractNum, problem2CQ, Equation
+from preprocess import extractNum, problem2CQ, Equation, Problem
 
 
 class ProblemTest(TestCase):
@@ -31,6 +31,43 @@ class ProblemTest(TestCase):
         self.assertEqual(extractNum(" sum of a number and its square is 20 , what i"), ["20"])
         self.assertEqual(extractNum("d $ 5,000 to open -123 - 123"), ["5,000", "-123", "- 123"])
         self.assertEqual(extractNum("and 6 ≤ y ≤ 16 . -4 ho"), ["6", "16", "-4"])
+
+    def test_to_num_problem(self):
+        # mathqa sample
+        context1 = "oshua and jose work at an auto repair center with 3 other workers . for a survey on health care insurance , 2 of the 6 workers will be randomly chosen to be interviewed ."
+        question1 = "what is the probability that joshua and jose will both be chosen ?"
+        numbers1 = ["3", "2", "6"]
+        problem1 = Problem(context1 + question1, numbers1, Equation(""))
+        self.assertEqual(problem1.context,
+                         "oshua and jose work at an auto repair center with number0 other workers . for a survey on health care insurance , number1 of the number2 workers will be randomly chosen to be interviewed .")
+        self.assertEqual(problem1.question, "what is the probability that joshua and jose will both be chosen ?")
+
+        # svamp sample
+        context2 = "every day ryan spends number0 hours on learning english and some more hours on learning chinese ."
+        question2 = "if he spends number1 hours more on learning english than on learning chinese how many hours does he spend on learning chinese ?"
+        numbers2 = ["11", "23"]
+        problem2 = Problem(context2 + question2, numbers2, Equation(""))
+        self.assertEqual(problem2.context,
+                         "every day ryan spends number0 hours on learning english and some more hours on learning chinese .")
+        self.assertEqual(problem2.question,
+                         "if he spends number1 hours more on learning english than on learning chinese how many hours does he spend on learning chinese ?")
+
+        # mawps and asdiv sample
+        context3 = "A chef needs to cook number0 potatoes . He has already cooked number1 ."
+        question3 = "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?"
+        numbers3 = ["9.0", "7.0", "3.0"]
+        problem3 = Problem(context3 + question3, numbers3, Equation(""))
+        self.assertEqual(problem3.context, "A chef needs to cook number0 potatoes . He has already cooked number1 .")
+        self.assertEqual(problem3.question,
+                         "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?")
+
+        # mawps and asdiv sample 변형 (question에 소숫점이 등장하는 문제)
+        context4 = "A chef needs to cook 9.0 potatoes . He has already cooked 7.0 ."
+        question4 = "If each potato takes 3.0 minutes to cook , how long will it take him to cook the rest ?"
+        numbers4 = ["9.0", "7.0", "3.0"]
+        problem4 = Problem(context4 + question4, numbers4, Equation(""))
+        self.assertEqual(problem4.context, "A chef needs to cook number0 potatoes . He has already cooked number1 .")
+        self.assertEqual(problem4.question, "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?")
 
 
 class TestEquation(TestCase):

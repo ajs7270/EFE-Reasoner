@@ -122,6 +122,9 @@ class Problem:
         self.golden_op = equation.getOperator()
         self.golden_argument = equation.getArgument()
 
+        problem = self.toNumProblem(problem)
+        self.context, self.question = problem2CQ(problem)
+
     def __repr__(self):
         return f"Problem(context={self.context}, question={self.question}, " \
                f"numbers={self.numbers}, equation={self.equation}, " \
