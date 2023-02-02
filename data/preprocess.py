@@ -173,7 +173,7 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
             data = json.load(f)
             print(f"number of problems: {len(data)}")
             for problem in data:
-                problem_text, problem["Problem"]
+                problem_text = problem["Problem"]
                 numbers = extractNum(problem["Problem"])
                 equation = Equation(problem["linear_formula"])
 
@@ -203,8 +203,8 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
 
         print(f"number of problems: {len(data)}")
         for problem in data.itertuples():
-            problem_text = problem.Qutestino
-            numbers = problem.Numbers
+            problem_text = problem.Question
+            numbers = extractNum(problem.Numbers)
             equation = Equation(problem.Equation, type="prefix")
 
             problem = Problem(problem_text, numbers, equation)
