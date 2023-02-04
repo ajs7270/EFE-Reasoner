@@ -219,7 +219,6 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
         constant_list = getConstantList(problem_list)
         constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.txt")
 
-        # dev와 train을 둘다 확인해야하기 때문에 "a"로 open
         with open(constant_list_path, 'w') as f:
             f.write("\n".join(map(lambda c : c.upper(), constant_list)) + "\n")
 
@@ -257,7 +256,6 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
         constant_list = getConstantList(problem_list)
         constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.txt")
 
-        # dev와 train을 둘다 확인해야하기 때문에 "a"로 open
         with open(constant_list_path, 'w') as f:
             f.write("\n".join(map(lambda c : c.upper(), constant_list)) + "\n")
 
