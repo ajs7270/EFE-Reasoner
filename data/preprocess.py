@@ -3,7 +3,7 @@ import re
 import json
 import pandas as pd
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from dataclasses import dataclass
 
 BASE_PATH = '../'
@@ -51,6 +51,15 @@ class Equation:
 
         for f in formula:
             entities = f.split(",")
+
+            for i in range(len(entities)):
+
+                # const가 const_100.0 형태로 되어 있으면 const_100 으로 바꿔줌
+                if re.match("const_\d+", entities[i]):
+                    num = float(entities[i].split("_")[1])
+                    if float.is_integer(num):
+                        entities[i] = "const_" + str(int(num))
+
             equation.append(entities)
 
         return equation
@@ -91,6 +100,14 @@ class Equation:
             if re.match(r"[+\-/*]", p):
                 prefix_list.append(Operator(p))
             else:
+                #숫자가 등장하면 CONST_XXX 형태로 변경
+                if re.match(r"\d+\.\d+", p):
+                    num = float(p)
+                    if float.is_integer(num):
+                        p = "const_" + str(int(num))
+                    else:
+                        p = "const_" + str(num)
+
                 prefix_list.append(Operand(p))
 
         # (operator, operand, operand) => #number
@@ -157,6 +174,17 @@ def extractNum(problem : str):
     return numbers
 
 
+def getConstantList(problem_list: list[Problem]) -> dict[str, list[Union[float, int]]]:
+    constant_list = set()
+    for p in problem_list:
+        for e in p.equation:
+            for op in e:
+                if re.match(r"const_\S+", op):
+                    constant_list.add(op)
+
+    return sorted(list(constant_list))
+
+
 #mathqa preprocessing
 def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "data/processed/mathqa"):
     train_path = Path(BASE_PATH, file_path, "train.json")
@@ -175,7 +203,7 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
             for problem in data:
                 problem_text = problem["Problem"]
                 numbers = extractNum(problem["Problem"])
-                equation = Equation(problem["linear_formula"])
+                equation = Equation(problem["linear_formula"], type="formula")
 
                 problem = Problem(problem_text, numbers, equation)
                 problem_list.append(problem)
@@ -187,9 +215,17 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
         with open(processed_path, 'w') as f:
             json.dump(problem_list, f, indent=4, cls=ProblemEncoder)
 
+        # Get Constant List
+        constant_list = getConstantList(problem_list)
+        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.txt")
+
+        # dev와 train을 둘다 확인해야하기 때문에 "a"로 open
+        with open(constant_list_path, 'w') as f:
+            f.write("\n".join(map(lambda c : c.upper(), constant_list)) + "\n")
+
 
 #svamp preprocessing
-def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path : str = "data/processed/svmap"):
+def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path : str = "data/processed/svamp"):
     train_path = Path(BASE_PATH, file_path, "train.csv")
     dev_path = Path(BASE_PATH, file_path, "dev.csv")
 
@@ -217,8 +253,17 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
         with open(processed_path, 'w') as f:
             json.dump(problem_list, f, indent=4, cls=ProblemEncoder)
 
+        # Get Constant List
+        constant_list = getConstantList(problem_list)
+        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.txt")
 
+        # dev와 train을 둘다 확인해야하기 때문에 "a"로 open
+        with open(constant_list_path, 'w') as f:
+            f.write("\n".join(map(lambda c : c.upper(), constant_list)) + "\n")
+
+
+#mawps preprocessing
 
 if __name__ == "__main__":
     preprocess_mathqa("data/raw/mathqa", "data/processed/mathqa")
-    preprocess_svamp("data/raw/mawps-asdiv-a_svamp", "data/processed/svmap")
+    preprocess_svamp("data/raw/mawps-asdiv-a_svamp", "data/processed/svamp")

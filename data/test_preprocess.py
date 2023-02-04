@@ -23,13 +23,14 @@ class ProblemTest(TestCase):
         self.assertEqual(problem2CQ(problem3), (context3, question3))
 
         # mawps and asdiv sample 변형 (question에 소숫점이 등장하는 문제)
-        problem4 = context4 = "A chef needs to cook 9.0 potatoes . He has already cooked 7.0 . If each potato takes 3.0 minutes to cook , how long will it take him to cook the rest ?"
+        problem4 = "A chef needs to cook 9.0 potatoes . He has already cooked 7.0 . If each potato takes 3.0 minutes to cook , how long will it take him to cook the rest ?"
         context4 = "A chef needs to cook number0 potatoes . He has already cooked number1 ."
         question4 = "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?"
         numbers4 = ["9.0", "7.0", "3.0"]
         problem4 = Problem(problem4, numbers4, Equation(""))
         self.assertEqual(problem4.context, context4)
         self.assertEqual(problem4.question, question4)
+
     def test_extract_num(self):
         # 숫자 종류: 10000 (자연수), 1,000,000 (쉼표가 있는 숫자), 1.5 (소수점이 있는 숫자), - 4 or -4(부호가 있는 숫자)
         self.assertEqual(extractNum("es - 4 ≤ x ≤ 5 and"), ["- 4", "5"])
@@ -75,7 +76,8 @@ class ProblemTest(TestCase):
         numbers4 = ["9.0", "7.0", "3.0"]
         problem4 = Problem(context4 + question4, numbers4, Equation(""))
         self.assertEqual(problem4.context, "A chef needs to cook number0 potatoes . He has already cooked number1 .")
-        self.assertEqual(problem4.question, "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?")
+        self.assertEqual(problem4.question,
+                         "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?")
 
 
 class TestEquation(TestCase):
@@ -135,4 +137,5 @@ class TestEquation(TestCase):
         self.assertEqual(converter.prefix2equation(prefix3), [["add", "n0", "n1"], ["add", "#0", "n2"]])
 
         prefix4 = "* / - number1 number0 number0 100.0"
-        self.assertEqual(converter.prefix2equation(prefix4), [["subtract", "n1", "n0"], ["divide", "#0", "n0"], ["multiply", "#1", "100.0"]])
+        self.assertEqual(converter.prefix2equation(prefix4),
+                         [["subtract", "n1", "n0"], ["divide", "#0", "n0"], ["multiply", "#1", "const_100"]])
