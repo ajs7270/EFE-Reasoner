@@ -148,7 +148,7 @@ class Problem:
         self.golden_op = equation.getOperator()
         self.golden_argument = equation.getArgument()
 
-        if "number" not in problem:
+        if "number0" not in problem:
             problem = self.toNumProblem(problem)
 
         self.context, self.question = problem2CQ(problem)
