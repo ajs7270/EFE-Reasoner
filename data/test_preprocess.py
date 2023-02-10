@@ -1,6 +1,6 @@
 from unittest import TestCase
-from preprocess import extractNum, problem2CQ, Equation, Problem
-
+from preprocess import extractNum, problem2CQ, Equation, Problem, getSameNumberIdx
+from pathlib import Path
 
 class ProblemTest(TestCase):
     def test_problem2cq(self):
@@ -31,6 +31,13 @@ class ProblemTest(TestCase):
         self.assertEqual(problem4.context, context4)
         self.assertEqual(problem4.question, question4)
 
+        # 질문이 ?가 아닌 .으로 끝나는 경우
+        problem5 = "average age of students of an adult school is 40 years . 120 new students whose average age is 32 years joined the school . as a result the average age is decreased by 4 years . find the number of students of the school after joining of the new students ."
+        context5 = "average age of students of an adult school is 40 years . 120 new students whose average age is 32 years joined the school . as a result the average age is decreased by 4 years ."
+        question5 = "find the number of students of the school after joining of the new students"
+        self.assertEqual(problem2CQ(problem5), (context5, question5))
+
+
     def test_extract_num(self):
         # 숫자 종류: 10000 (자연수), 1,000,000 (쉼표가 있는 숫자), 1.5 (소수점이 있는 숫자), - 4 or -4(부호가 있는 숫자)
         self.assertEqual(extractNum("es - 4 ≤ x ≤ 5 and"), ["- 4", "5"])
@@ -40,6 +47,8 @@ class ProblemTest(TestCase):
         self.assertEqual(extractNum(" sum of a number and its square is 20 , what i"), ["20"])
         self.assertEqual(extractNum("d $ 5,000 to open -123 - 123"), ["5,000", "-123", "- 123"])
         self.assertEqual(extractNum("and 6 ≤ y ≤ 16 . -4 ho"), ["6", "16", "-4"])
+
+        #TODO : 추가적인 테스팅
 
     def test_to_num_problem(self):
         # mathqa sample
@@ -79,6 +88,20 @@ class ProblemTest(TestCase):
         self.assertEqual(problem4.question,
                          "If each potato takes number2 minutes to cook , how long will it take him to cook the rest ?")
 
+        # TODO: mathqa sample 변형
+        context1 = "oshua and jose work at an auto repair center with 3 other workers . for a survey on health care insurance , 0 of the 36 workers will be randomly chosen to be interviewed ."
+        question1 = "what is the probability that joshua and jose will both be chosen ?"
+        numbers1 = ["3", "0", "36"]
+        problem1 = Problem(context1 + question1, numbers1, Equation(""))
+        self.assertEqual(problem1.context,
+                         "oshua and jose work at an auto repair center with number0 other workers . for a survey on health care insurance , number1 of the number2 workers will be randomly chosen to be interviewed .")
+        self.assertEqual(problem1.question, "what is the probability that joshua and jose will both be chosen ?")
+
+    def test_get_same_number_idx(self):
+        self.assertEqual(getSameNumberIdx(["1", "2", "3", "4", "5"]), [])
+        self.assertEqual(getSameNumberIdx(["1", "2", "1", "4", "1"]), [[0,2,4]])
+        self.assertEqual(getSameNumberIdx(["1", "2", "1", "4", "1", "2"]), [[0,2,4], [1,5]])
+        self.assertEqual(getSameNumberIdx(["0.3333","0.3333"]), [[0,1]])
 
 class TestEquation(TestCase):
     def test_formular2eqation(self):
@@ -139,3 +162,47 @@ class TestEquation(TestCase):
         prefix4 = "* / - number1 number0 number0 100.0"
         self.assertEqual(converter.prefix2equation(prefix4),
                          [["subtract", "n1", "n0"], ["divide", "#0", "n0"], ["multiply", "#1", "const_100"]])
+
+
+class Test(TestCase):
+    def check_svamp_number_type(self):
+        # number가 중복된 경우 문제를
+        # number0 number1 number0 형태로 치환하는지 (X)
+        # number0 number1 number2 형태로 치환하는지 (O) => 이렇게 치환했음으로 몇번째 number들이 같은 숫자인지 체크할 필요가 있음
+        BASE_PATH = Path(__file__).parent.parent
+        file_path: str = "data/raw/mawps-asdiv-a_svamp"
+        train_path = Path(BASE_PATH, file_path, "train.csv")
+        dev_path = Path(BASE_PATH, file_path, "dev.csv")
+
+        dataset_path = [train_path, dev_path]
+        import re
+        import pandas as pd
+        for path in dataset_path:
+            with open(path, 'r') as f:
+                data = pd.read_csv(path)
+
+                for problem in data.itertuples():
+                    numlen = len(problem.Numbers.split())
+                    self.assertEqual(numlen, len(re.findall(r"number\d+", problem.Question)))
+                    if numlen != len(extractNum(problem.Question)):
+                        print(problem)
+                        print(extractNum(problem.Question))
+
+
+    def check_same_nuber_svamp(self):
+        # number가 중복으로 출현하는지 확인 => 중복으로 출현함
+        BASE_PATH = Path(__file__).parent.parent
+        file_path: str = "data/raw/mawps-asdiv-a_svamp"
+        train_path = Path(BASE_PATH, file_path, "train.csv")
+        dev_path = Path(BASE_PATH, file_path, "dev.csv")
+
+        dataset_path = [train_path, dev_path]
+        import re
+        import pandas as pd
+        for path in dataset_path:
+            with open(path, 'r') as f:
+                data = pd.read_csv(path)
+                for problem in data.itertuples():
+                    num_list = problem.Numbers.split()
+                    if len(num_list) != len(set(num_list)):
+                        print(problem)
