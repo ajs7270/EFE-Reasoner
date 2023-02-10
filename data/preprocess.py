@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Tuple, Optional, Union
 from dataclasses import dataclass
 
-BASE_PATH = '../'
+BASE_PATH = Path(__file__).parent.parent
 
 
 class Equation:
@@ -129,22 +129,35 @@ class Equation:
 
         return equation
 
+def getSameNumberIdx(numbers: list[str]) -> list[list[int]]:
+    same_number_idx = []
+    for num in set(numbers):
+        idx = [i for i, n in enumerate(numbers) if n == num]
+        if len(idx) != 1:
+            same_number_idx.append(idx)
+
+    return sorted(same_number_idx)
 
 class Problem:
     def __init__(self, problem: str, numbers: list[str], equation: Equation):
         self.context = None
         self.question = None
         self.numbers = numbers
+        self.same_number_idx = getSameNumberIdx(numbers)
         self.equation = equation.getList()
         self.golden_op = equation.getOperator()
         self.golden_argument = equation.getArgument()
 
-        problem = self.toNumProblem(problem)
+        if "number" not in problem:
+            problem = self.toNumProblem(problem)
+
         self.context, self.question = problem2CQ(problem)
 
     def toNumProblem(self, problem: str) -> str:
-        for i, n in enumerate(self.numbers):
-            problem = problem.replace(n, f"number{i}")
+        append_idx = 0
+        for i, iter in enumerate(re.finditer(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)):
+            problem = problem[:append_idx + iter.start()] + f"number{i}" + problem[append_idx + iter.end():]
+            append_idx += len(f"number{i}") - len(iter.group())
 
         return problem
 
@@ -161,7 +174,7 @@ class ProblemEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 def problem2CQ(problem : str) -> Tuple[str, str]:
-    sentences = problem.strip().split(".")
+    sentences = problem.strip().strip(".").split(".")
     context, question = ".".join(sentences[:-1]) + ".", sentences[-1].strip()
 
     return context, question
@@ -170,7 +183,7 @@ def problem2CQ(problem : str) -> Tuple[str, str]:
 def extractNum(problem : str):
     # 문제에 등장하는 숫자의 종류
     # 숫자 종류: 10000 (자연수), 1,000,000 (쉼표가 있는 숫자), 1.5 (소수점이 있는 숫자), - 4 or -4(부호가 있는 숫자)
-    numbers = re.findall(r'(?:[-+][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)
+    numbers = re.findall(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)
     return numbers
 
 
@@ -208,7 +221,7 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
                 problem = Problem(problem_text, numbers, equation)
                 problem_list.append(problem)
 
-        processed_path = Path(BASE_PATH, save_path, f"{path.stem}_preprocessed.json")
+        processed_path = Path(BASE_PATH, save_path, f"{path.stem}.json")
 
         if not os.path.exists(processed_path.parent):
             os.makedirs(processed_path.parent)
@@ -217,10 +230,10 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
 
         # Get Constant List
         constant_list = getConstantList(problem_list)
-        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.txt")
+        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.json")
 
         with open(constant_list_path, 'w') as f:
-            f.write("\n".join(map(lambda c : c.upper(), constant_list)) + "\n")
+            json.dump(constant_list, f, indent=4)
 
 
 #svamp preprocessing
@@ -239,13 +252,13 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
         print(f"number of problems: {len(data)}")
         for problem in data.itertuples():
             problem_text = problem.Question
-            numbers = extractNum(problem.Numbers)
+            numbers = problem.Numbers.split()
             equation = Equation(problem.Equation, type="prefix")
 
             problem = Problem(problem_text, numbers, equation)
             problem_list.append(problem)
 
-        processed_path = Path(BASE_PATH, save_path, f"{path.stem}_preprocessed.json")
+        processed_path = Path(BASE_PATH, save_path, f"{path.stem}.json")
 
         if not os.path.exists(processed_path.parent):
             os.makedirs(processed_path.parent)
@@ -254,10 +267,10 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
 
         # Get Constant List
         constant_list = getConstantList(problem_list)
-        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.txt")
+        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.json")
 
         with open(constant_list_path, 'w') as f:
-            f.write("\n".join(map(lambda c : c.upper(), constant_list)) + "\n")
+            json.dump(constant_list, f, indent=4)
 
 
 #mawps preprocessing
