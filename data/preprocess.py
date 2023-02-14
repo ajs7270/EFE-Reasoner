@@ -140,6 +140,7 @@ def getSameNumberIdx(numbers: list[str]) -> list[list[int]]:
 
 class Problem:
     def __init__(self, problem: str, numbers: list[str], equation: Equation):
+        self.orig_problem = problem
         self.context = None
         self.question = None
         self.numbers = numbers
@@ -149,8 +150,13 @@ class Problem:
         self.golden_argument = equation.getArgument()
 
         if "number0" not in problem:
-            problem = self.toNumProblem(problem)
-
+            problem_Jisu = self.toNumProblem(problem)
+            problem_Hyunsik = self.toNumProblem_Hyunsik(problem)
+            # if problem_Jisu != problem_Hyunsik:
+                # print(f"orig_problem: {self.orig_problem}")
+                # print(f"problem_Jisu: {problem_Jisu}")
+                # print(f"problem_Hyunsik: {problem_Hyunsik}")
+            problem = problem_Hyunsik
         self.context, self.question = problem2CQ(problem)
 
     def toNumProblem(self, problem: str) -> str:
@@ -173,10 +179,73 @@ class ProblemEncoder(json.JSONEncoder):
             return obj.__dict__
         return json.JSONEncoder.default(self, obj)
 
-def problem2CQ(problem : str) -> Tuple[str, str]:
-    sentences = problem.strip().strip(".").split(".")
-    context, question = ".".join(sentences[:-1]) + ".", sentences[-1].strip()
+# counts the number of consecutive dots and returns the correct number of "|~|" symbols
+def replace_dots(match):
+    num_dots = len(match.group(0)) // 2
+    return " |~|" * num_dots
 
+# problem 을 가지고 context, question으로 분리
+# .을 가지고 분리해주기 이전에 문장부호 .이 아니거나, question의 .이 아닌 경우를 식별하여 |~|로 대체
+def problem2sentences(problem: str) -> [str]:
+    replacements = [
+        (" \. \)$", " |~| )"),
+        (" \. \]$", " |~| ]"),
+        ("p \. m \.", "p |~| m |~|"),
+        ("p \. m ", "p |~| m "),
+        ("a \. m \.", "a |~| m |~|"),
+        ("a \. m$", "a |~| m"),
+        ("a \. m ", "a |~| m "),
+        ("l \. c \. m \.", "l |~| c |~| m |~|"),
+        ("l \. c \. m ", "l |~| c |~| m "),
+        ("h \. c \. f \.", "h |~| c |~| f |~|"),
+        ("h \. c \. f ", "h |~| c |~| f "),
+        ("c \. i \.", "c |~| i |~|"),
+        ("c \. i ", "c |~| i "),
+        ("\% p \. a \. ", "% p |~| a |~| "),
+        ("\% \. p \. a \.", "% |~| p |~| a |~|"),
+        ("\% p \. a", "% p |~| a"),
+        ("\% pa \. a ", "% pa |~| a "),
+        ("p \. c \. p \. a \.", "p |~| c |~| p |~| a |~|"),
+        ("p \. c \. p \. a", "p |~| c |~| p |~| a"),
+        ("washington \. d \. c \. ", "washington |~| d |~| c |~| "),
+        ("washington d \. c", "washington d |~| c"),
+        (" d \. c", " d |~| c"),
+        ("sq \. ", "sq |~| "),
+        ("sq \. m \. ", "sq |~| m |~| "),
+        ("g \. p \.", "g |~| p |~|"),
+        ("g \. p ", "g |~| p "),
+        (" rs \.", " rs |~| "),
+        (" no \. ", " no |~| "),
+        ("v \. c \. r \.", "v |~| c |~| r |~|"),
+        ("s \. i \. ", "s |~| i |~| "),
+        (" s \. i ", " s |~| i "),
+        ("km / hr \.", "km / hr |~|"),
+        ("t \. v \.", "t |~| v |~|"),
+        ("t \. v ", "t |~| v "),
+        ("cc \. ", "cc |~| "),
+        ("prob . ", "prob |~| "),
+        ("\. \?", "|~| ?"),
+        (r"(.) \. (.) \. ", r"\1 |~| \2 |~| "),
+        ("\. '$", "|~| '"),
+        (r"([\=\+\-x]) \. number", r"\1 |~| number"),
+    ]
+
+    problem = re.sub("( \.){2,}", replace_dots, problem)  # . * n -> |~| * n
+    for pattern, replacement in replacements:
+        problem = re.sub(pattern, replacement, problem)
+
+    sentences = problem.strip().strip(".").split(".")
+    return sentences
+
+
+def problem2CQ(problem : str) -> Tuple[str, str]:
+
+    sentences = problem2sentences(problem)
+    context, question = ".".join(sentences[:-1]) + ".", sentences[-1].strip()
+    context = re.sub("(\|\~\|)", ".", context)
+    # print(f"context: {context}")
+    question = re.sub("(\|\~\|)", ".", question)
+    # print(f"question: {question}")
     return context, question
 
 # 문제에 등장한 문자열 그대로 추출하는 함수 => 따라서 후처리를 통해 숫자만 추출해야할 필요가 생길 수 있음
