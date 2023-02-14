@@ -2,6 +2,7 @@ import os
 import re
 import json
 import pandas as pd
+import copy
 from pathlib import Path
 from typing import Tuple, Optional, Union
 from dataclasses import dataclass
@@ -138,6 +139,28 @@ def getSameNumberIdx(numbers: list[str]) -> list[list[int]]:
 
     return sorted(same_number_idx)
 
+def start_later(problem, iter, prev_iter_end):
+  indet = ['a', 'b', 'c', 'x', 'y', 'z', 'w', 'k', 'm', 'n', 'p', 'q', 'i', 'j', 'l', 't', 'u', 'v', 'd', 'e']
+  blk = 0 # 0~2 값, - n 꼴이면 start 위치를 두 칸 미뤄서 n부터 보게 한다.
+  start,end = iter.start(), iter.end() 
+  if problem[start] == "-":                 
+    if start != 0 and problem[+ start-2] in indet and start-2 == 0: #  x - 3 이 시작일 때
+      if problem[start+1] == " ": 
+        blk=2
+      else :
+        blk=1
+    if problem[start-2] in indet and start != 0 and problem[start-3]  ==  " " : # 시작점이 문장 처음이 아니고,  x - 5처럼 앞에 미지수가 있을 경우                      
+      if problem[start+1] == " ":       # x -5 와 x - 5 구분              
+        blk=2
+      else :                        
+        blk=1
+    if iter.start() == prev_iter_end + 1:            # 3 - 5 처럼 number(k)의 시작과 number(k-1)의 끝이 1칸 차이면 뺄셈으로 친다.     
+      if problem[start+1] == " ": #3 -5와 3 - 5 구분 (3-5는 없는듯) 
+        blk =2
+      else:
+        blk = 1
+  return blk
+
 class Problem:
     def __init__(self, problem: str, numbers: list[str], equation: Equation):
         self.context = None
@@ -154,11 +177,16 @@ class Problem:
         self.context, self.question = problem2CQ(problem)
 
     def toNumProblem(self, problem: str) -> str:
-        append_idx = 0
-        for i, iter in enumerate(re.finditer(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)):
-            problem = problem[:append_idx + iter.start()] + f"number{i}" + problem[append_idx + iter.end():]
-            append_idx += len(f"number{i}") - len(iter.group())
-
+        original_problem = copy.deepcopy(problem)
+        append_idx = 0 # n이 number{i}꼴로 바뀌면서 생기는 string 길이 변화 해소
+        prev_iter_end = 0 # 바로 전 iter의 iter.end()
+        blk = 0 #
+        for i, iter in enumerate(re.finditer(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)):  
+            append_idx += blk            
+            blk = start_later(original_problem, iter, prev_iter_end)        
+            problem = problem[:append_idx + iter.start() + blk] + f"number{i}" + problem[append_idx + iter.end():]
+            append_idx += len(f"number{i}") - len(iter.group()) 
+            prev_iter_end = iter.end()
         return problem
 
     def __repr__(self):
@@ -184,7 +212,11 @@ def extractNum(problem : str):
     # 문제에 등장하는 숫자의 종류
     # 숫자 종류: 10000 (자연수), 1,000,000 (쉼표가 있는 숫자), 1.5 (소수점이 있는 숫자), - 4 or -4(부호가 있는 숫자)
     numbers = re.findall(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)
-    return numbers
+    prev_iter_end = 0
+    for i, iter in enumerate(re.finditer(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)):
+      numbers[i]= numbers[i][start_later(problem, iter, prev_iter_end) :]
+      prev_iter_end = iter.end()          
+    return numbers            
 
 
 def getConstantList(problem_list: list[Problem]) -> dict[str, list[Union[float, int]]]:
