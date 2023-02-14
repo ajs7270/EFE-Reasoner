@@ -215,6 +215,7 @@ def extractNum(problem : str):
     prev_iter_end = 0
     for i, iter in enumerate(re.finditer(r'(?:[-][ ]?)?\d+(?:\.\d+|(?:,\d\d\d)+)?', problem)):
       numbers[i]= numbers[i][start_later(problem, iter, prev_iter_end) :]
+      numbers[i] = numbers[i].replace(" ", "")
       prev_iter_end = iter.end()          
     return numbers            
 
