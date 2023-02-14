@@ -45,7 +45,7 @@ class ProblemTest(TestCase):
         self.assertEqual(extractNum("and 6 ≤ y ≤ 16 . -4 ho"), ["6", "16", "-4"])
         self.assertEqual(extractNum("atest 6 - digit  divided by 6 , 7 , 8 , 9 ,"), ["6", "6", "7", "8", "9"])
         self.assertEqual(extractNum(" sum of a number and its square is 20 , what i"), ["20"])
-        self.assertEqual(extractNum("d $ 5,000 to open -123 - 123"), ["5,000", "-123", "- 123"])
+        self.assertEqual(extractNum("d $ 5,000 to open -123 haha - 123"), ["5,000", "-123", "- 123"])
         self.assertEqual(extractNum("and 6 ≤ y ≤ 16 . -4 ho"), ["6", "16", "-4"])
 
         #TODO : 추가적인 테스팅
