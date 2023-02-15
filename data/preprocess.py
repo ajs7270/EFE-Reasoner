@@ -163,7 +163,6 @@ def start_later(problem, iter, prev_iter_end):
 
 class Problem:
     def __init__(self, problem: str, numbers: list[str], equation: Equation):
-        self.orig_problem = problem
         self.context = None
         self.question = None
         self.numbers = numbers

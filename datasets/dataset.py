@@ -82,9 +82,9 @@ class Dataset(data.Dataset):
 
     @classmethod
     def _translate2number(self, tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
-        question_mask = torch.zeros_like(tokenized_problem)  # shape (1,38)
+        question_mask = torch.zeros_like(tokenized_problem)
         question_mask[:, tokenized_context.shape[1] - 1:] = 1
-        number_mask = torch.zeros_like(tokenized_problem)  # shape (1,38)
+        number_mask = torch.zeros_like(tokenized_problem)
 
         # <quant>를 number_tensors로 치환
         num_count = 0
@@ -112,7 +112,6 @@ class Dataset(data.Dataset):
 
     def _num2quent(self, problem_text: str):
         # 문제에 등장하는 모든 number변수를 " <quant> "로 치환
-
         append_idx = 0
         for find_number in re.finditer("number\d+", problem_text):
             if find_number.start() == 0:
