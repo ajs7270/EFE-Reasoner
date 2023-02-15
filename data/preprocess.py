@@ -173,13 +173,7 @@ class Problem:
         self.golden_argument = equation.getArgument()
 
         if "number0" not in problem:
-            problem_Jisu = self.toNumProblem(problem)
-            problem_Hyunsik = self.toNumProblem_Hyunsik(problem)
-            # if problem_Jisu != problem_Hyunsik:
-                # print(f"orig_problem: {self.orig_problem}")
-                # print(f"problem_Jisu: {problem_Jisu}")
-                # print(f"problem_Hyunsik: {problem_Hyunsik}")
-            problem = problem_Hyunsik
+            problem = self.toNumProblem(problem)
         self.context, self.question = problem2CQ(problem)
 
     def toNumProblem(self, problem: str) -> str:
@@ -265,15 +259,25 @@ def problem2sentences(problem: str) -> [str]:
     sentences = problem.strip().strip(".").split(".")
     return sentences
 
+def concat_after_qmark(sentences):
+
+    new_sentences = []
+    for i, sentence in enumerate(sentences):
+        #check if there is a question mark        
+        if "?" in sentence:
+            #concatenate the rest of the sentences
+            rest = " ".join(sentences[i:])
+            new_sentences.append(rest)
+            break
+        new_sentences.append(sentence)
+    return new_sentences
 
 def problem2CQ(problem : str) -> Tuple[str, str]:
 
-    sentences = problem2sentences(problem)
+    sentences = concat_after_qmark(problem2sentences(problem))
     context, question = ".".join(sentences[:-1]) + ".", sentences[-1].strip()
     context = re.sub("(\|\~\|)", ".", context)
-    # print(f"context: {context}")
     question = re.sub("(\|\~\|)", ".", question)
-    # print(f"question: {question}")
     return context, question
 
 # 문제에 등장한 문자열 그대로 추출하는 함수 => 따라서 후처리를 통해 숫자만 추출해야할 필요가 생길 수 있음
