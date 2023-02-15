@@ -173,13 +173,7 @@ class Problem:
         self.golden_argument = equation.getArgument()
 
         if "number0" not in problem:
-            problem_Jisu = self.toNumProblem(problem)
-            problem_Hyunsik = self.toNumProblem_Hyunsik(problem)
-            # if problem_Jisu != problem_Hyunsik:
-                # print(f"orig_problem: {self.orig_problem}")
-                # print(f"problem_Jisu: {problem_Jisu}")
-                # print(f"problem_Hyunsik: {problem_Hyunsik}")
-            problem = problem_Hyunsik
+            problem = self.toNumProblem(problem)
         self.context, self.question = problem2CQ(problem)
 
     def toNumProblem(self, problem: str) -> str:
@@ -212,12 +206,12 @@ def replace_dots(match):
     num_dots = len(match.group(0)) // 2
     return " |~|" * num_dots
 
-# problem 을 가지고 context, question으로 분리
-# .을 가지고 분리해주기 이전에 문장부호 .이 아니거나, question의 .이 아닌 경우를 식별하여 |~|로 대체
+# divides the problem into context and question
+# before dividing sentences using '.' , replace '.' with '|~|' if it is not a sentence ending(e.g., a.m., h.c.f.)
 def problem2sentences(problem: str) -> [str]:
     replacements = [
-        (" \. \)$", " |~| )"),
-        (" \. \]$", " |~| ]"),
+        (" \. \)$", " |~| )"), #ends with . )
+        (" \. \]$", " |~| ]"), #ends with . ]
         ("p \. m \.", "p |~| m |~|"),
         ("p \. m ", "p |~| m "),
         ("a \. m \.", "a |~| m |~|"),
@@ -238,8 +232,8 @@ def problem2sentences(problem: str) -> [str]:
         ("washington \. d \. c \. ", "washington |~| d |~| c |~| "),
         ("washington d \. c", "washington d |~| c"),
         (" d \. c", " d |~| c"),
-        ("sq \. ", "sq |~| "),
         ("sq \. m \. ", "sq |~| m |~| "),
+        ("sq \. ", "sq |~| "),
         ("g \. p \.", "g |~| p |~|"),
         ("g \. p ", "g |~| p "),
         (" rs \.", " rs |~| "),
@@ -252,16 +246,21 @@ def problem2sentences(problem: str) -> [str]:
         ("t \. v ", "t |~| v "),
         ("cc \. ", "cc |~| "),
         ("prob . ", "prob |~| "),
-        ("\. \?", "|~| ?"),
-        (r"(.) \. (.) \. ", r"\1 |~| \2 |~| "),
-        ("\. '$", "|~| '"),
-        (r"([\=\+\-x]) \. number", r"\1 |~| number"),
+        ("mr \. ", "mr |~| "),
+        (" ms \. ", " ms |~| "),
+        ("Mrs\. ", "Mrs|~| "),
+        ("Mr\. ", "Mr|~| "),
+        ("\. \?", "|~| ?"), # when sentence ends with ". ?"
+        (r"(.) \. (.) \. ", r"\1 |~| \2 |~| "), # all cases like "a . b . "-> "a |~| b |~| " are abbreviations.
+        ("\. '$", "|~| '"), # when sentence ends with ". '" -> "|~| '"
+        (r"([\=\+\-x/]) \. number", r"\1 |~| number"), # change decimal point ". number00" -> "|~| number00"
     ]
 
-    problem = re.sub("( \.){2,}", replace_dots, problem)  # . * n -> |~| * n
+    problem = re.sub("( \.){2,}", replace_dots, problem)  # 2 or more consecutive dots " . . . ." -> " |~| |~| |~| |~|"
     for pattern, replacement in replacements:
         problem = re.sub(pattern, replacement, problem)
 
+    # strip the last dot and split using "."
     sentences = problem.strip().strip(".").split(".")
     return sentences
 
@@ -270,10 +269,10 @@ def problem2CQ(problem : str) -> Tuple[str, str]:
 
     sentences = problem2sentences(problem)
     context, question = ".".join(sentences[:-1]) + ".", sentences[-1].strip()
+
+    # restore "|~|" -> "."
     context = re.sub("(\|\~\|)", ".", context)
-    # print(f"context: {context}")
     question = re.sub("(\|\~\|)", ".", question)
-    # print(f"question: {question}")
     return context, question
 
 # 문제에 등장한 문자열 그대로 추출하는 함수 => 따라서 후처리를 통해 숫자만 추출해야할 필요가 생길 수 있음
