@@ -13,12 +13,16 @@ BASE_PATH = Path(__file__).parent.parent
 
 @dataclass
 class Feature:
-    input_ids: torch.Tensor
-    attention_mask: torch.Tensor
-    question_mask: torch.Tensor
-    number_mask: torch.Tensor
-    label: torch.tensor
-
+    # B : Batch size
+    # S : Max length of tokenized problem text (Source)
+    # T : Max length of tokenized equation (Target)
+    input_ids: torch.Tensor         # [B, S]
+    attention_mask: torch.Tensor    # [B, S]
+    question_mask: torch.Tensor     # [B, S]
+    number_mask: torch.Tensor       # [B, S]
+    equation_label: torch.tensor    # [B, T, 3]
+    operator_label: torch.tensor    # [B, T, 1]
+    operand_label: torch.tensor     # [B, T, 2], type : constant, number in problem, previous step result
 
 
 @dataclass
