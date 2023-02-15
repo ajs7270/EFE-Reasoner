@@ -80,6 +80,17 @@ class Dataset(data.Dataset):
             .format(num_count, len(number_tensors), number_tensors,
                     self.tokenizer.convert_ids_to_tokens(tokenized_problem[0]))
 
+        attention_mask = torch.ones_like(tokenized_problem)
+
+        assert tokenized_problem.shape[1] == question_mask.shape[1] == number_mask.shape[1] == attention_mask.shape[1], \
+            "tokenized_problem.shape[1]: {}\n" \
+            "question_mask.shape[1]: {}\n" \
+            "number_mask.shape[1]: {}\n" \
+            "attention_mask.shape[1]: {}\n" \
+            "모든 shape 같아야 합니다."\
+            .format(tokenized_problem.shape[1], question_mask.shape[1], number_mask.shape[1], attention_mask.shape[1])
+
+
     @staticmethod
     def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
         tokenized_problem = torch.cat(
