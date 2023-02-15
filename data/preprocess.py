@@ -264,10 +264,22 @@ def problem2sentences(problem: str) -> [str]:
     sentences = problem.strip().strip(".").split(".")
     return sentences
 
+def concat_after_qmark(sentences):
+
+    new_sentences = []
+    for i, sentence in enumerate(sentences):
+        #check if there is a question mark        
+        if "?" in sentence:
+            #concatenate the rest of the sentences
+            rest = " ".join(sentences[i:])
+            new_sentences.append(rest)
+            break
+        new_sentences.append(sentence)
+    return new_sentences
 
 def problem2CQ(problem : str) -> Tuple[str, str]:
 
-    sentences = problem2sentences(problem)
+    sentences = concat_after_qmark(problem2sentences(problem))
     context, question = ".".join(sentences[:-1]) + ".", sentences[-1].strip()
 
     # restore "|~|" -> "."
