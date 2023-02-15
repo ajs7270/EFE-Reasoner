@@ -61,12 +61,12 @@ class Dataset(data.Dataset):
     def _convert_to_feature(self, problem: Problem) -> Feature:
         # ~~~~ number0 ~~~~ number2 ~~~~~~~ 문장을
         # ~~~~ <quant> ~~~~ <quant> ~~~~~~~ 로 치환
-        problem_text = problem.context + " " + problem.question
-        problem_text = self._num2quent(problem_text)
+        problem_question = self._num2quent(problem.question)
+        problem_context = self._num2quent(problem.context)
 
         # tokenize
-        tokenized_problem = self.tokenizer(problem_text, return_tensors="pt").input_ids
-        tokenized_context = self.tokenizer(problem.context, return_tensors="pt").input_ids
+        tokenized_problem = self.tokenizer(problem_context, problem_question, return_tensors="pt").input_ids
+        tokenized_context = self.tokenizer(problem_context, return_tensors="pt").input_ids
         # 첫번째는 SOS, 마지막은 EOS 토큰이므로 제외시킴
         number_tensors = [self.tokenizer(number, return_tensors="pt").input_ids[:, 1:-1] for number in problem.numbers]
 
@@ -80,8 +80,12 @@ class Dataset(data.Dataset):
             .format(num_count, len(number_tensors), number_tensors,
                     self.tokenizer.convert_ids_to_tokens(tokenized_problem[0]))
 
-    @classmethod
-    def _translate2number(self, tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
+    @staticmethod
+    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
+        tokenized_problem = torch.cat(
+            [tokenized_problem[:, :tokenized_context.shape[1] - 1], tokenized_problem[:, tokenized_context.shape[1]+1:]],
+            dim=1)
+        tokenized_problem[0, :tokenized_context.shape[1]].tolist()
         question_mask = torch.zeros_like(tokenized_problem)
         question_mask[:, tokenized_context.shape[1] - 1:] = 1
         number_mask = torch.zeros_like(tokenized_problem)
@@ -110,7 +114,8 @@ class Dataset(data.Dataset):
 
         return tokenized_problem, question_mask, number_mask, num_count
 
-    def _num2quent(self, problem_text: str):
+    @staticmethod
+    def _num2quent(problem_text: str):
         # 문제에 등장하는 모든 number변수를 " <quant> "로 치환
         append_idx = 0
         for find_number in re.finditer("number\d+", problem_text):
