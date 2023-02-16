@@ -299,7 +299,7 @@ def extractNum(problem : str):
     return numbers            
 
 
-def getConstantList(problem_list: list[Problem]) -> dict[str, list[Union[float, int]]]:
+def getConstantList(problem_list: list[Problem]) -> list[str]:
     constant_list = set()
     for p in problem_list:
         for e in p.equation:
@@ -307,8 +307,14 @@ def getConstantList(problem_list: list[Problem]) -> dict[str, list[Union[float, 
                 if re.match(r"const_\S+", op):
                     constant_list.add(op)
 
-    return sorted(list(constant_list))
+    return list(constant_list)
 
+def getOperatorList(problem_list: list[Problem]) -> list[str]:
+    operator_list = set()
+    for p in problem_list:
+        for e in p.equation:
+            operator_list.add(e[0])
+    return list(operator_list)
 
 #mathqa preprocessing
 def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "data/processed/mathqa"):
@@ -318,6 +324,8 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
 
     dataset_path = [train_path, dev_path, test_path]
 
+    constant_list = []
+    operator_list = []
     for path in dataset_path:
         print(f"preprocessing {path}...")
         with open(path, 'r') as f:
@@ -341,11 +349,24 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
             json.dump(problem_list, f, indent=4, cls=ProblemEncoder)
 
         # Get Constant List
-        constant_list = getConstantList(problem_list)
-        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.json")
+        constant_list += getConstantList(problem_list)
 
-        with open(constant_list_path, 'w') as f:
-            json.dump(constant_list, f, indent=4)
+        # Get Operator List
+        operator_list += getOperatorList(problem_list)
+
+    # Save Constant List
+    constant_list = sorted(list(set(constant_list)))
+    constant_list_path = Path(BASE_PATH, save_path, "constant_list.json")
+
+    with open(constant_list_path, 'w') as f:
+        json.dump(constant_list, f, indent=4)
+
+    # Save Operator List
+    operator_list = sorted(list(set(operator_list)))
+    operator_list_path = Path(BASE_PATH, save_path, "operator_list.json")
+
+    with open(operator_list_path, 'w') as f:
+        json.dump(operator_list, f, indent=4)
 
 
 #svamp preprocessing
@@ -355,6 +376,8 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
 
     dataset_path = [train_path, dev_path]
 
+    constant_list = []
+    operator_list = []
     for path in dataset_path:
         print(f"preprocessing {path}...")
         data = pd.read_csv(path)
@@ -378,11 +401,24 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
             json.dump(problem_list, f, indent=4, cls=ProblemEncoder)
 
         # Get Constant List
-        constant_list = getConstantList(problem_list)
-        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.json")
+        constant_list += getConstantList(problem_list)
 
-        with open(constant_list_path, 'w') as f:
-            json.dump(constant_list, f, indent=4)
+        # Get Operator List
+        operator_list += getOperatorList(problem_list)
+
+    # Save Constant List
+    constant_list = sorted(list(set(constant_list)))
+    constant_list_path = Path(BASE_PATH, save_path, "constant_list.json")
+
+    with open(constant_list_path, 'w') as f:
+        json.dump(constant_list, f, indent=4)
+
+    # Save Operator List
+    operator_list = sorted(list(set(operator_list)))
+    operator_list_path = Path(BASE_PATH, save_path, "operator_list.json")
+
+    with open(operator_list_path, 'w') as f:
+        json.dump(operator_list, f, indent=4)
 
 
 #mawps preprocessing
