@@ -1,14 +1,14 @@
-from pathlib import Path
-from dataclasses import dataclass
-from typing import Tuple
-
-from tqdm import tqdm
-import torch.utils.data as data
-import json
-from transformers import AutoTokenizer, AutoConfig
-import torch
-from torchnlp.encoders import LabelEncoder
 import re
+import json
+from pathlib import Path
+from tqdm import tqdm
+
+import torch
+import torch.utils.data as data
+from torchnlp.encoders import LabelEncoder
+from transformers import AutoTokenizer, AutoConfig
+
+from dataclasses import dataclass
 
 BASE_PATH = Path(__file__).parent.parent
 
@@ -100,8 +100,9 @@ class Dataset(data.Dataset):
             "question_mask.shape[1]: {}\n" \
             "number_mask.shape[1]: {}\n" \
             "attention_mask.shape[1]: {}\n" \
-            "모든 shape 같아야 합니다."\
-            .format(tokenized_problem.shape[1], question_mask.shape[1], number_mask.shape[1], attention_mask.shape[1])
+            "모든 shape 같아야 합니다." \
+                .format(tokenized_problem.shape[1], question_mask.shape[1], number_mask.shape[1],
+                        attention_mask.shape[1])
 
         # equation label
         equation_label = self._convert_equation_label(problem.equation)
@@ -118,7 +119,8 @@ class Dataset(data.Dataset):
     @staticmethod
     def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
         tokenized_problem = torch.cat(
-            [tokenized_problem[:, :tokenized_context.shape[1] - 1], tokenized_problem[:, tokenized_context.shape[1]+1:]],
+            [tokenized_problem[:, :tokenized_context.shape[1] - 1],
+             tokenized_problem[:, tokenized_context.shape[1] + 1:]],
             dim=1)
         tokenized_problem[0, :tokenized_context.shape[1]].tolist()
         question_mask = torch.zeros_like(tokenized_problem)
@@ -170,7 +172,7 @@ class Dataset(data.Dataset):
 
         return problem_text
 
-    def _convert_equation_label(self, equation: list[list[str]]) -> torch.Tensor :
+    def _convert_equation_label(self, equation: list[list[str]]) -> torch.Tensor:
         equation_label = torch.zeros((len(equation), len(equation[0])))
 
         for i in range(len(equation)):
@@ -193,11 +195,11 @@ class Dataset(data.Dataset):
             max_equation_num = max(max_equation_num, len(problem.equation))
 
         ret += [f"n{i}" for i in range(max_operand_num)]
-        ret += [f"#{i}" for i in range(max_equation_num-1)]
+        ret += [f"#{i}" for i in range(max_equation_num - 1)]
 
         return ret
 
-    def _split_equation_label(self, equation_label: torch.Tensor) -> Tuple[torch.Tensor]:
+    def _split_equation_label(self, equation_label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # TODO:
         operator_label: torch.Tensor = None
         operand_label: torch.Tensor = None
