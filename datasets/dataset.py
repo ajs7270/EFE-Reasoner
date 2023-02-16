@@ -6,6 +6,7 @@ import torch.utils.data as data
 import json
 from transformers import AutoTokenizer, AutoConfig
 import torch
+from torchnlp.encoders import LabelEncoder
 import re
 
 BASE_PATH = Path(__file__).parent.parent
@@ -39,13 +40,20 @@ class Problem:
 class Dataset(data.Dataset):
     def __init__(self,
                  data_path: str = "data/processed/mathqa/train.json",
-                 constant_path: str = "data/processed/mathqa/train_constant_list.json",
+                 constant_path: str = "data/processed/mathqa/constant_list.json",
+                 operator_path: str = "data/processed/mathqa/operator_list.json",
                  pretrained_model_name: str = "roberta-base",
                  ):
         with open(Path(BASE_PATH, data_path), 'r') as f:
             self.orig_dataset = json.load(f)
         with open(Path(BASE_PATH, constant_path), 'r') as f:
             constant_list = json.load(f)
+        with open(Path(BASE_PATH, operator_path), 'r') as f:
+            operator_list = json.load(f)
+        self.operator_encoder = LabelEncoder(operator_list,
+                                             reserved_labels=['unknown'], unknown_index=0)
+        self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list)
+                                            , reserved_labels=['unknown'], unknown_index=0)
         self.constant2id = {constant: i for i, constant in enumerate(constant_list)}
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
         self.plm_config = AutoConfig.from_pretrained(pretrained_model_name)
@@ -94,6 +102,8 @@ class Dataset(data.Dataset):
             "모든 shape 같아야 합니다."\
             .format(tokenized_problem.shape[1], question_mask.shape[1], number_mask.shape[1], attention_mask.shape[1])
 
+        # equation label
+        equation_label = self._convert_equation_label(problem.equation)
 
     @staticmethod
     def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
@@ -149,6 +159,34 @@ class Dataset(data.Dataset):
             append_idx = append_idx + len("<quant>") - len(find_number.group())
 
         return problem_text
+
+    def _convert_equation_label(self, equation: list[list[str]]) -> torch.Tensor :
+        equation_label = torch.zeros((len(equation), len(equation[0])))
+
+        for i in range(len(equation)):
+            for j in range(len(equation[i])):
+                if j == 0:
+                    equation_label[i][j] = self.operator_encoder.encode(equation[i][j])
+                else:
+                    equation_label[i][j] = self.operand_encoder.encode(equation[i][j])
+
+        return equation_label
+
+    def _get_available_operand_list(self, constant_list: list[str]) -> list[str]:
+        ret = constant_list
+
+        max_operand_num = 0
+        max_equation_num = 0
+        for problem_dict in tqdm(self.orig_dataset, desc="Get max operand number and max equation length"):
+            problem = Problem(**problem_dict)
+            max_operand_num = max(max_operand_num, len(problem.numbers))
+            max_equation_num = max(max_equation_num, len(problem.equation))
+
+        ret += [f"n{i}" for i in range(max_operand_num)]
+        ret += [f"#{i}" for i in range(max_equation_num-1)]
+
+        return ret
+
 
     def __getitem__(self, index) -> Feature:
         return self.features[index]
