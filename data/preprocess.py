@@ -318,6 +318,7 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
 
     dataset_path = [train_path, dev_path, test_path]
 
+    constant_list = []
     for path in dataset_path:
         print(f"preprocessing {path}...")
         with open(path, 'r') as f:
@@ -341,11 +342,12 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
             json.dump(problem_list, f, indent=4, cls=ProblemEncoder)
 
         # Get Constant List
-        constant_list = getConstantList(problem_list)
-        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.json")
+        constant_list += getConstantList(problem_list)
+    constant_list = sorted(list(set(constant_list)))
+    constant_list_path = Path(BASE_PATH, save_path, "constant_list.json")
 
-        with open(constant_list_path, 'w') as f:
-            json.dump(constant_list, f, indent=4)
+    with open(constant_list_path, 'w') as f:
+        json.dump(constant_list, f, indent=4)
 
 
 #svamp preprocessing
@@ -355,6 +357,7 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
 
     dataset_path = [train_path, dev_path]
 
+    constant_list = []
     for path in dataset_path:
         print(f"preprocessing {path}...")
         data = pd.read_csv(path)
@@ -378,11 +381,12 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
             json.dump(problem_list, f, indent=4, cls=ProblemEncoder)
 
         # Get Constant List
-        constant_list = getConstantList(problem_list)
-        constant_list_path = Path(BASE_PATH, save_path, f"{path.stem}_constant_list.json")
+        constant_list += getConstantList(problem_list)
+    constant_list = sorted(list(set(constant_list)))
+    constant_list_path = Path(BASE_PATH, save_path, "constant_list.json")
 
-        with open(constant_list_path, 'w') as f:
-            json.dump(constant_list, f, indent=4)
+    with open(constant_list_path, 'w') as f:
+        json.dump(constant_list, f, indent=4)
 
 
 #mawps preprocessing
