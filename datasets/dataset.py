@@ -1,5 +1,6 @@
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Tuple
 
 from tqdm import tqdm
 import torch.utils.data as data
@@ -104,6 +105,15 @@ class Dataset(data.Dataset):
 
         # equation label
         equation_label = self._convert_equation_label(problem.equation)
+        operator_label, operand_label = self._split_equation_label(equation_label)
+
+        return Feature(input_ids=tokenized_problem,
+                       attention_mask=attention_mask,
+                       question_mask=question_mask,
+                       number_mask=number_mask,
+                       equation_label=equation_label,
+                       operator_label=operator_label,
+                       operand_label=operand_label)
 
     @staticmethod
     def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
@@ -187,6 +197,12 @@ class Dataset(data.Dataset):
 
         return ret
 
+    def _split_equation_label(self, equation_label: torch.Tensor) -> Tuple[torch.Tensor]:
+        # TODO:
+        operator_label: torch.Tensor = None
+        operand_label: torch.Tensor = None
+
+        return operator_label, operand_label
 
     def __getitem__(self, index) -> Feature:
         return self.features[index]
