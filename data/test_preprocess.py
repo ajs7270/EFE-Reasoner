@@ -40,12 +40,12 @@ class ProblemTest(TestCase):
 
     def test_extract_num(self):
         # 숫자 종류: 10000 (자연수), 1,000,000 (쉼표가 있는 숫자), 1.5 (소수점이 있는 숫자), - 4 or -4(부호가 있는 숫자)
-        self.assertEqual(extractNum("es - 4 ≤ x ≤ 5 and"), ["- 4", "5"])
+        self.assertEqual(extractNum("es - 4 ≤ x ≤ 5 and"), ["-4", "5"])
         self.assertEqual(extractNum("es -4 ≤ x ≤ 5 and"), ["-4", "5"])
         self.assertEqual(extractNum("and 6 ≤ y ≤ 16 . -4 ho"), ["6", "16", "-4"])
         self.assertEqual(extractNum("atest 6 - digit  divided by 6 , 7 , 8 , 9 ,"), ["6", "6", "7", "8", "9"])
         self.assertEqual(extractNum(" sum of a number and its square is 20 , what i"), ["20"])
-        self.assertEqual(extractNum("d $ 5,000 to open -123 haha - 123"), ["5,000", "-123", "- 123"])
+        self.assertEqual(extractNum("d $ 5,000 to open -123 haha - 123"), ["5,000", "-123", "-123"])
         self.assertEqual(extractNum("and 6 ≤ y ≤ 16 . -4 ho"), ["6", "16", "-4"])
 
         #TODO : 추가적인 테스팅
