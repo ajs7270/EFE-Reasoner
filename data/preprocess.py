@@ -299,7 +299,7 @@ def extractNum(problem : str):
     return numbers            
 
 
-def getConstantList(problem_list: list[Problem]) -> dict[str, list[Union[float, int]]]:
+def getConstantList(problem_list: list[Problem]) -> list[str]:
     constant_list = set()
     for p in problem_list:
         for e in p.equation:
@@ -307,7 +307,7 @@ def getConstantList(problem_list: list[Problem]) -> dict[str, list[Union[float, 
                 if re.match(r"const_\S+", op):
                     constant_list.add(op)
 
-    return sorted(list(constant_list))
+    return list(constant_list)
 
 def getOperatorList(problem_list: list[Problem]) -> list[str]:
     operator_list = set()
