@@ -22,9 +22,9 @@ class Feature:
     attention_mask: torch.Tensor    # [B, S]
     question_mask: torch.Tensor     # [B, S]
     number_mask: torch.Tensor       # [B, S]
-    equation_label: torch.tensor    # [B, T, 3]
+    equation_label: torch.tensor    # [B, T, arity + 1]
     operator_label: torch.tensor    # [B, T, 1]
-    operand_label: torch.tensor     # [B, T, 2], type : constant, number in problem, previous step result
+    operand_label: torch.tensor     # [B, T, arity], type : constant, number in problem, previous step result
 
 
 @dataclass
@@ -173,7 +173,11 @@ class Dataset(data.Dataset):
         return problem_text
 
     def _convert_equation_label(self, equation: list[list[str]]) -> torch.Tensor:
-        equation_label = torch.zeros((len(equation), len(equation[0])))
+        # maximum arity of equation: max(operands + 1(operator), for all equation[i])
+        max_arity = 0
+        for i in range(len(equation)):
+            max_arity = max(max_arity, len(equation[i]) - 1)
+        equation_label = torch.zeros((len(equation), max_arity + 1))
 
         for i in range(len(equation)):
             for j in range(len(equation[i])):
@@ -182,7 +186,8 @@ class Dataset(data.Dataset):
                 else:
                     equation_label[i][j] = self.operand_encoder.encode(equation[i][j])
 
-        return equation_label
+        # [T, 3] -> [B, T, max_arity + 1]
+        return equation_label.unsqueeze(dim=0)
 
     def _get_available_operand_list(self, constant_list: list[str]) -> list[str]:
         ret = constant_list
@@ -201,8 +206,8 @@ class Dataset(data.Dataset):
 
     def _split_equation_label(self, equation_label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # TODO:
-        operator_label: torch.Tensor = None
-        operand_label: torch.Tensor = None
+        operator_label: torch.Tensor = equation_label[:,:,:1] # [B, T, 1]
+        operand_label: torch.Tensor = equation_label[:,:,1:] # [B, T, 2]
 
         return operator_label, operand_label
 
