@@ -41,16 +41,17 @@ class Problem:
 class Dataset(data.Dataset):
     def __init__(self,
                  data_path: str = "data/processed/mathqa/train.json",
-                 constant_path: str = "data/processed/mathqa/constant_list.json",
-                 operator_path: str = "data/processed/mathqa/operator_list.json",
+                 config_path : str = "data/processed/mathqa/config.json",
                  pretrained_model_name: str = "roberta-base",
                  ):
         with open(Path(BASE_PATH, data_path), 'r') as f:
             self.orig_dataset = json.load(f)
-        with open(Path(BASE_PATH, constant_path), 'r') as f:
-            constant_list = json.load(f)
-        with open(Path(BASE_PATH, operator_path), 'r') as f:
-            operator_list = json.load(f)
+        with open(Path(BASE_PATH, config_path), 'r') as f:
+            self.config = json.load(f)
+
+        operator_list = self.config['operator_dict'].keys()
+        constant_list = self.config['constant_list']
+
         self.operator_encoder = LabelEncoder(operator_list,
                                              reserved_labels=['unknown'], unknown_index=0)
         self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list)
@@ -192,15 +193,11 @@ class Dataset(data.Dataset):
     def _get_available_operand_list(self, constant_list: list[str]) -> list[str]:
         ret = constant_list
 
-        max_operand_num = 0
-        max_equation_num = 0
-        for problem_dict in tqdm(self.orig_dataset, desc="Get max operand number and max equation length"):
-            problem = Problem(**problem_dict)
-            max_operand_num = max(max_operand_num, len(problem.numbers))
-            max_equation_num = max(max_equation_num, len(problem.equation))
+        max_numbers_size = self.config["max_numbers_size"]
+        max_operators_size = self.config["max_operators_size"]
 
-        ret += [f"n{i}" for i in range(max_operand_num)]
-        ret += [f"#{i}" for i in range(max_equation_num - 1)]
+        ret += [f"n{i}" for i in range(max_numbers_size)]
+        ret += [f"#{i}" for i in range(max_operators_size - 1)]
 
         return ret
 

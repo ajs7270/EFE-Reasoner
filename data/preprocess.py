@@ -309,12 +309,15 @@ def getConstantList(problem_list: list[Problem]) -> list[str]:
 
     return list(constant_list)
 
-def getOperatorList(problem_list: list[Problem]) -> list[str]:
-    operator_list = set()
+# get the number of operands for each operator
+def getOperatorDict(problem_list: list[Problem], operator_dict: dict) -> dict[str:set[int]]:
     for p in problem_list:
         for e in p.equation:
-            operator_list.add(e[0])
-    return list(operator_list)
+            if e[0] in operator_dict:
+                operator_dict[e[0]].add(len(e) - 1)
+            else:
+                operator_dict[e[0]] = {len(e) - 1}
+    return operator_dict
 
 #mathqa preprocessing
 def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "data/processed/mathqa"):
@@ -325,7 +328,11 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
     dataset_path = [train_path, dev_path, test_path]
 
     constant_list = []
-    operator_list = []
+    operator_dict = {}
+
+    max_numbers_size = 0
+    max_operators_size = 0
+
     for path in dataset_path:
         print(f"preprocessing {path}...")
         with open(path, 'r') as f:
@@ -341,6 +348,10 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
                 problem = Problem(problem_text, numbers, equation)
                 problem_list.append(problem)
 
+                # Get Max number and operator size
+                max_numbers_size = max(max_numbers_size, len(problem.numbers))
+                max_operators_size = max(max_operators_size, len(problem.equation))
+
         processed_path = Path(BASE_PATH, save_path, f"{path.stem}.json")
 
         if not os.path.exists(processed_path.parent):
@@ -351,22 +362,24 @@ def preprocess_mathqa(file_path : str = "data/raw/mathqa", save_path : str = "da
         # Get Constant List
         constant_list += getConstantList(problem_list)
 
-        # Get Operator List
-        operator_list += getOperatorList(problem_list)
+        # Get Operator Dict(key: operator name, value: list[num of operands]])
+        operator_dict = getOperatorDict(problem_list, operator_dict)
 
+    config = {}
+
+    # Save Max Number Size
+    config["max_numbers_size"] = max_numbers_size
+    config["max_operators_size"] = max_operators_size
     # Save Constant List
     constant_list = sorted(list(set(constant_list)))
-    constant_list_path = Path(BASE_PATH, save_path, "constant_list.json")
+    config["constant_list"] = constant_list
+    # Save Operator Dict
+    operator_dict = {k: list(v) for k, v in operator_dict.items()}
+    config["operator_dict"] = operator_dict
 
-    with open(constant_list_path, 'w') as f:
-        json.dump(constant_list, f, indent=4)
-
-    # Save Operator List
-    operator_list = sorted(list(set(operator_list)))
-    operator_list_path = Path(BASE_PATH, save_path, "operator_list.json")
-
-    with open(operator_list_path, 'w') as f:
-        json.dump(operator_list, f, indent=4)
+    config_list_path = Path(BASE_PATH, save_path, "config.json")
+    with open(config_list_path, 'w') as f:
+        json.dump(config, f, indent=4)
 
 
 #svamp preprocessing
@@ -377,7 +390,11 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
     dataset_path = [train_path, dev_path]
 
     constant_list = []
-    operator_list = []
+    operator_dict = {}
+
+    max_numbers_size = 0
+    max_operators_size = 0
+
     for path in dataset_path:
         print(f"preprocessing {path}...")
         data = pd.read_csv(path)
@@ -393,6 +410,10 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
             problem = Problem(problem_text, numbers, equation)
             problem_list.append(problem)
 
+            # Get Max number and operator size
+            max_numbers_size = max(max_numbers_size, len(problem.numbers))
+            max_operators_size = max(max_operators_size, len(problem.equation))
+
         processed_path = Path(BASE_PATH, save_path, f"{path.stem}.json")
 
         if not os.path.exists(processed_path.parent):
@@ -404,21 +425,23 @@ def preprocess_svamp(file_path : str = "data/raw/mawps-asdiv-a_svamp", save_path
         constant_list += getConstantList(problem_list)
 
         # Get Operator List
-        operator_list += getOperatorList(problem_list)
+        operator_dict = getOperatorDict(problem_list, operator_dict)
 
+    config = {}
+
+    # Save Max Number Size
+    config["max_numbers_size"] = max_numbers_size
+    config["max_operators_size"] = max_operators_size
     # Save Constant List
     constant_list = sorted(list(set(constant_list)))
-    constant_list_path = Path(BASE_PATH, save_path, "constant_list.json")
-
-    with open(constant_list_path, 'w') as f:
-        json.dump(constant_list, f, indent=4)
-
+    config["constant_list"] = constant_list
     # Save Operator List
-    operator_list = sorted(list(set(operator_list)))
-    operator_list_path = Path(BASE_PATH, save_path, "operator_list.json")
+    operator_dict = {k: list(v) for k, v in operator_dict.items()}
+    config["operator_dict"] = operator_dict
 
-    with open(operator_list_path, 'w') as f:
-        json.dump(operator_list, f, indent=4)
+    config_list_path = Path(BASE_PATH, save_path, "config.json")
+    with open(config_list_path, 'w') as f:
+        json.dump(config, f, indent=4)
 
 
 #mawps preprocessing
