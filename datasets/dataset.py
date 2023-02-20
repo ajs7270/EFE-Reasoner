@@ -206,6 +206,9 @@ class Dataset(data.Dataset):
         operator_label: torch.Tensor = equation_label[:,:,:1] # [B, T, 1]
         operand_label: torch.Tensor = equation_label[:,:,1:] # [B, T, 2]
 
+        assert len(equation_label.shape) == 3, "dimension of equation_label must be 3"
+        assert operator_label.shape[2] == 1, "3rd dimension of operator_label must be 1"
+        assert operand_label.shape[2] + operator_label.shape[2] == equation_label.shape[2], "shape of operand_label + operator_label must be equal to equation_label"
         return operator_label, operand_label
 
     def __getitem__(self, index) -> Feature:
