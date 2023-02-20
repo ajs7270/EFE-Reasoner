@@ -109,6 +109,24 @@ class Dataset(data.Dataset):
         equation_label = self._convert_equation_label(problem.equation)
         operator_label, operand_label = self._split_equation_label(equation_label)
 
+        assert len(equation_label.shape) == len(operator_label.shape) == len(operand_label.shape) == 3, \
+            "dimension of labels must be 3"
+
+        assert equation_label.shape[:2] == operator_label.shape[:2] == operand_label.shape[:2], \
+            "equation_label.shape[0]: {}, equation_label.shape[1]: {}\n" \
+            "operator_label.shape[0]: {}, operator_label.shape[1]: {}\n" \
+            "operand_label.shape[0]: {}, operand_label.shape[1]: {}\n" \
+            "equation_label, operator_label, operand_label must have same 1st dim" \
+                .format(equation_label.shape[0], equation_label.shape[1], operator_label.shape[0],
+                        operator_label.shape[1], operand_label.shape[0], operand_label.shape[1])
+
+        assert equation_label.shape[2] == operator_label.shape[2] + operand_label.shape[2], \
+            "sum of 3rd dim of operator_label, operand_label must be equal to operation_label 3rd dim\n" \
+            "equation_label.shape[2]: {}\n" \
+            "operator_label.shape[2]: {}\n" \
+            "operand_label.shape[2]: {}" \
+                .format(equation_label.shape[2], operator_label.shape[2], operand_label.shape[2])
+
         return Feature(input_ids=tokenized_problem,
                        attention_mask=attention_mask,
                        question_mask=question_mask,
@@ -191,13 +209,19 @@ class Dataset(data.Dataset):
         return equation_label.unsqueeze(dim=0)
 
     def _get_available_operand_list(self, constant_list: list[str]) -> list[str]:
-        ret = constant_list
+        ret = []
+        ret += constant_list
 
         max_numbers_size = self.config["max_numbers_size"]
         max_operators_size = self.config["max_operators_size"]
 
         ret += [f"n{i}" for i in range(max_numbers_size)]
         ret += [f"#{i}" for i in range(max_operators_size - 1)]
+
+        assert len(ret) == max_numbers_size + (max_operators_size - 1) + len(constant_list), \
+            "length of ret: {}, max_numbers_size: {}, max_operators_size: {}, len(constant_list): {}\n" \
+            "length of available operand list must be equal to max_numbers_size + max_operators_size - 1 + len(constant_list)" \
+                .format(len(ret), max_numbers_size, max_operators_size, len(constant_list))
 
         return ret
 
@@ -206,9 +230,6 @@ class Dataset(data.Dataset):
         operator_label: torch.Tensor = equation_label[:,:,:1] # [B, T, 1]
         operand_label: torch.Tensor = equation_label[:,:,1:] # [B, T, 2]
 
-        assert len(equation_label.shape) == 3, "dimension of equation_label must be 3"
-        assert operator_label.shape[2] == 1, "3rd dimension of operator_label must be 1"
-        assert operand_label.shape[2] + operator_label.shape[2] == equation_label.shape[2], "shape of operand_label + operator_label must be equal to equation_label"
         return operator_label, operand_label
 
     def __getitem__(self, index) -> Feature:
