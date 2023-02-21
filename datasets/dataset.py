@@ -5,10 +5,15 @@ from tqdm import tqdm
 
 import torch
 import torch.utils.data as data
+from torch.nn.utils.rnn import pad_sequence
+
 from torchnlp.encoders import LabelEncoder
 from transformers import AutoTokenizer, AutoConfig
 
 from dataclasses import dataclass
+
+from typing import List, Tuple
+import torch.nn.functional as F
 
 BASE_PATH = Path(__file__).parent.parent
 
@@ -208,7 +213,7 @@ class Dataset(data.Dataset):
         # [T, 3] -> [B, T, max_arity + 1]
         return equation_label.unsqueeze(dim=0)
 
-    def _get_available_operand_list(self, constant_list: list[str]) -> list[str]:
+    def _get_available_operand_list(self, constant_list: List[str]) -> List[str]:
         ret = []
         ret += constant_list
 
@@ -239,5 +244,30 @@ class Dataset(data.Dataset):
         return len(self.features)
 
     def collate_function(self, batch: list[Feature]) -> Feature:
-        print(batch)
-        return batch[0]
+        input_ids_list = [feature.input_ids[0] for feature in batch]
+        attention_mask_list = [feature.attention_mask[0] for feature in batch]
+        question_mask_list = [feature.question_mask[0] for feature in batch]
+        number_mask_list = [feature.number_mask[0] for feature in batch]
+        equation_label_list = [feature.equation_label[0] for feature in batch] # List[(T, max_arity + 1)]
+
+        input_ids = pad_sequence(input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        attention_mask = pad_sequence(attention_mask_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        question_mask = pad_sequence(question_mask_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        number_mask = pad_sequence(number_mask_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+
+        max_arity = 0
+        padded_equation_label_list = []
+        # find max_arity
+        for equation_label in equation_label_list: # equation_label: (T, arity + 1)
+            max_arity = max(max_arity, equation_label.shape[1] - 1)
+        for equation_label in equation_label_list:
+            padded_equation_label = F.pad(equation_label, (0, max_arity + 1 - equation_label.shape[1]),
+                                          value=self.tokenizer.pad_token_id)
+            padded_equation_label_list.append(padded_equation_label) # padded_equation_label: (T, max_arity + 1)
+
+        equation_label = pad_sequence(padded_equation_label_list, batch_first=True,
+                                      padding_value=self.tokenizer.pad_token_id)
+        operator_label, operand_label = self._split_equation_label(equation_label)
+
+        return Feature(input_ids, attention_mask, question_mask, number_mask, equation_label, operator_label,
+                       operand_label)

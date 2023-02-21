@@ -222,11 +222,28 @@ class TestDataset(TestCase):
 
     def test_collate_function_all_dataset(self):
         dataset = Dataset("data/processed/mathqa/test.json")
-        dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=dataset.collate_function)
+        dataloader = DataLoader(dataset, batch_size=5, shuffle=False, collate_fn=dataset.collate_function, drop_last=True)
         for i, batch in enumerate(dataloader):
-            print(batch)
+            # check if batch size is correct
+            self.assertEqual(batch.input_ids.shape[0], 5)
+            self.assertEqual(batch.attention_mask.shape[0], 5)
+            self.assertEqual(batch.question_mask.shape[0], 5)
+            self.assertEqual(batch.number_mask.shape[0], 5)
+            self.assertEqual(batch.equation_label.shape[0], 5)
+            self.assertEqual(batch.operator_label.shape[0], 5)
+            self.assertEqual(batch.operand_label.shape[0], 5)
+            # check if sequence length is correct
+            self.assertEqual(batch.input_ids.shape[1], batch.attention_mask.shape[1])
+            self.assertEqual(batch.input_ids.shape[1], batch.question_mask.shape[1])
+            self.assertEqual(batch.input_ids.shape[1], batch.number_mask.shape[1])
+            # check if equation label length is correct
+            self.assertEqual(batch.equation_label.shape[1], batch.operator_label.shape[1])
+            self.assertEqual(batch.equation_label.shape[1], batch.operand_label.shape[1])
+            # check if equation label arity is correct
+            self.assertEqual(batch.operator_label.shape[2], 1)
+            self.assertEqual(batch.equation_label.shape[2], batch.operator_label.shape[2] + batch.operand_label.shape[2])
 
     def test_collate_function(self):
-        # TODO:
+
         pass
 
