@@ -1,5 +1,6 @@
 from unittest import TestCase
 
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 import re
 from dataset import Dataset, Problem, Feature
@@ -218,3 +219,14 @@ class TestDataset(TestCase):
             self.assertEqual(decoded_problem, original_problem)
             # check whether question_mask is correct after stripping whitespaces
             self.assertEqual(decoded_question, original_question)
+
+    def test_collate_function_all_dataset(self):
+        dataset = Dataset("data/processed/mathqa/test.json")
+        dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=dataset.collate_function)
+        for i, batch in enumerate(dataloader):
+            print(batch)
+
+    def test_collate_function(self):
+        # TODO:
+        pass
+

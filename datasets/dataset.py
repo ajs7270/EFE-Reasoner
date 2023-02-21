@@ -237,3 +237,7 @@ class Dataset(data.Dataset):
 
     def __len__(self) -> int:
         return len(self.features)
+
+    def collate_function(self, batch: list[Feature]) -> Feature:
+        print(batch)
+        return batch[0]
