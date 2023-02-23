@@ -56,22 +56,22 @@ class Dataset(data.Dataset):
 
         operator_list = self.config['operator_dict'].keys()
         constant_list = self.config['constant_list']
-        self.model_name = pretrained_model_name
+        self.pretrained_model_name = pretrained_model_name
         self.operator_encoder = LabelEncoder(operator_list,
                                              reserved_labels=['unknown'], unknown_index=0)
         self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list)
                                             , reserved_labels=['unknown'], unknown_index=0)
         self.constant2id = {constant: i for i, constant in enumerate(constant_list)}
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.plm_config = AutoConfig.from_pretrained(self.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
+        self.plm_config = AutoConfig.from_pretrained(self.pretrained_model_name)
 
         # 문제에 등장하는 모든 숫자를 <quant>로 치환한 후 tokenize하기 때문에 tokenize가 끝난 후 숫자의 위치를 찾기 위해 사용
         # this idea is from Deductive MWP
         # AnReu/math_pretrained_bert, does not include spaces in tokenization only exclude first and last token
-        if self.model_name in ["AnReu/math_pretrained_bert"]:
+        if self.pretrained_model_name in ["AnReu/math_pretrained_bert"]:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-1]
         # witiko/mathberta, use 'Ġ' as space, exclude 2 of beggining and end.
-        elif self.model_name in ["wikito/mathberta"]:
+        elif self.pretrained_model_name in ["wikito/mathberta"]:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-2]\
         # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
         # exclude 1 beggining(<s>) and 2 end(Ġ, <\s>).
@@ -100,7 +100,7 @@ class Dataset(data.Dataset):
                                                                                           tokenized_context,
                                                                                           number_tensors,
                                                                                           self.quant_list_ids,
-                                                                                          self.model_name)
+                                                                                          self.pretrained_model_name)
         assert num_count == len(number_tensors), "number의 개수가 맞지 않음 {} != {}\n" \
                                                  "number list : {}\n" \
                                                  "tokenized problem: {}\n" \
@@ -264,29 +264,26 @@ class Dataset(data.Dataset):
         return len(self.features)
 
     def collate_function(self, batch: list[Feature]) -> Feature:
-        input_ids_list = [feature.input_ids[0] for feature in batch]
-        attention_mask_list = [feature.attention_mask[0] for feature in batch]
-        question_mask_list = [feature.question_mask[0] for feature in batch]
-        number_mask_list = [feature.number_mask[0] for feature in batch]
-        equation_label_list = [feature.equation_label[0] for feature in batch] # List[(T, max_arity + 1)]
+        bsz = len(batch)
+        max_input_ids = self.plm_config.max_position_embeddings
+        max_operators_size = self.config["max_operators_size"]
+        max_operator_operands_size = max(map(max, self.config['operator_dict'].values()))
 
-        input_ids = pad_sequence(input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        attention_mask = pad_sequence(attention_mask_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        question_mask = pad_sequence(question_mask_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        number_mask = pad_sequence(number_mask_list, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        input_ids = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
+        attention_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
+        question_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
+        number_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
+        equation_label = torch.full((bsz, max_operators_size, max_operator_operands_size + 1),
+                                    self.tokenizer.pad_token_id)
 
-        max_arity = 0
-        padded_equation_label_list = []
-        # find max_arity
-        for equation_label in equation_label_list: # equation_label: (T, arity + 1)
-            max_arity = max(max_arity, equation_label.shape[1] - 1)
-        for equation_label in equation_label_list:
-            padded_equation_label = F.pad(equation_label, (0, max_arity + 1 - equation_label.shape[1]),
-                                          value=self.tokenizer.pad_token_id)
-            padded_equation_label_list.append(padded_equation_label) # padded_equation_label: (T, max_arity + 1)
+        for i in range(bsz):
+            input_ids[i, :batch[i].input_ids.shape[1]] = batch[i].input_ids[0]
+            attention_mask[i, :batch[i].attention_mask.shape[1]] = batch[i].attention_mask[0]
+            question_mask[i, :batch[i].question_mask.shape[1]] = batch[i].question_mask[0]
+            number_mask[i, :batch[i].number_mask.shape[1]] = batch[i].number_mask[0]
+            equation_label[i, :batch[i].equation_label.shape[1], :batch[i].equation_label.shape[2]] = \
+                batch[i].equation_label[0]
 
-        equation_label = pad_sequence(padded_equation_label_list, batch_first=True,
-                                      padding_value=self.tokenizer.pad_token_id)
         operator_label, operand_label = self._split_equation_label(equation_label)
 
         return Feature(input_ids, attention_mask, question_mask, number_mask, equation_label, operator_label,
