@@ -8,77 +8,77 @@ import torch
 
 
 class TestDataset(TestCase):
-    tokenizers = []
-    quant_list_ids = []
-    models = ["roberta-base", "roberta-large"] #, "microsoft/deberta-v3-base", "microsoft/deberta-base"]
-    for model_name in models:
-        tokenizers.append(AutoTokenizer.from_pretrained(model_name))
-    for tokenizer in tokenizers:
-        quant_list_ids.append(tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-2])
+    datasets = []
+    # roberta-large, roberta-base, npm, npm-single, AnReu/math_pretrained_roberta have same tokenizer
+    models = ["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
+    "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"]
 
-    def _num2quant(self, problem_text: str):
-        # before tokenization, change all numbers to token "<quant>"
-        append_idx = 0
-        for find_number in re.finditer("number\d+", problem_text):
-            if find_number.start() == 0:
-                problem_text = " " + problem_text
-                append_idx += 1
+    for model in models:
+        print("preparing datasets for model: ", model)
+        datasets.append(Dataset(data_path="data/processed/mathqa/test.json",
+                                config_path="data/processed/mathqa/config.json",
+                                pretrained_model_name=model))
 
-            if find_number.end() + append_idx >= len(problem_text):
-                problem_text = problem_text + " "
 
-            l_space = "" if problem_text[find_number.start() + append_idx - 1] == " " else " "
-            r_space = "" if problem_text[find_number.end() + append_idx] == " " else " "
-            problem_text = problem_text[:find_number.start() + append_idx] + \
-                           l_space + "<quant>" + r_space + problem_text[find_number.end() + append_idx:]
+    def _prepare_test_translate2number(self, dataset, problem) -> (list, list, list, list, list):
+        model_name = dataset.model_name
+        tokenizer = dataset.tokenizer
+        feature = dataset._convert_to_feature(problem)
+        tokenized_problem = feature.input_ids
+        question_mask = feature.question_mask
+        number_mask = feature.number_mask
 
-            append_idx = append_idx + len("<quant>") - len(find_number.group())
-        return problem_text
-
-    def refine_test_translate2number(self, problem, tokenizer, i):
-        # get tokenized numbers using number_mask, append to num_list
-        problem_question = self._num2quant(problem.question)
-        problem_context = self._num2quant(problem.context)
-        # tokenize
-        tokenized_problem = self.tokenizer(problem_context, problem_question, return_tensors="pt").input_ids
-        tokenized_context = self.tokenizer(problem_context, return_tensors="pt").input_ids
-        # first token "<s>", last token "</s>" is removed
-        number_tensors = [self.tokenizer(number, return_tensors="pt").input_ids[:, 1:-1] for number in
-                          problem.numbers]
-
-        tokenized_problem, question_mask, number_mask, num_count = Dataset._translate2number(tokenized_problem,
-                                                                                             tokenized_context,
-                                                                                             number_tensors,
-                                                                                             self.quant_list_ids[i])
-        num_list = []
+        decoded_num_list = []
         decoded_sentence = ""
         tokenized_question = ""
+
         # get tokens of cur_num, decode them and append to num_list
         for cur_num in range(max(number_mask[0])):
             mask = number_mask[0] == (cur_num + 1)
             tokenized_num = torch.masked_select(tokenized_problem[0], mask)
-            num_list.append(tokenizer.decode(tokenized_num))
+            # witiko/mathberta adds a space at the beggining of every sentence, so we need to remove it
+            if model_name in ["witiko/mathberta"]:
+                decoded_num_list.append(tokenizer.decode(tokenized_num).strip())
+            else:
+                decoded_num_list.append(tokenizer.decode(tokenized_num))
+
         # strip whitespaces from problem and decoded tokenized_problem, also removed "<s>", "</s>"
         for k in range(len(tokenized_problem[0])):
             decoded_sentence += tokenizer.decode(tokenized_problem[0][k])
-        decoded_sentence = decoded_sentence.replace("<s>", "").replace("</s>", "").replace(" ", "")
+        # AnReu/math_pretrained_bert has ## in front of tokens that are not the first token of a word
+        # and it uses [CLS] and [SEP] as special tokens
+        if model_name in ["AnReu/math_pretrained_bert"]:
+            decoded_sentence = decoded_sentence.replace("[CLS]", "").replace("[SEP]", "").replace("##", "").replace(" ", "")
+        else:
+            decoded_sentence = decoded_sentence.replace("<s>", "").replace("</s>", "").replace(" ", "")
         problem_sentence = problem.context + problem.question
-        for k, num in enumerate(num_list):
+        for k, num in enumerate(decoded_num_list):
             problem_sentence = problem_sentence.replace(f"number{k}", num).replace(" ", "")
+
         # strip whitespaces from question and decoded tokenized question, also removed "<s>", "</s>"
         for k in range(len(question_mask[0])):
             if question_mask[0][k] != 0:
                 tokenized_question += tokenizer.decode(tokenized_problem[0][k])
-        tokenized_question = tokenized_question.replace(" ", "").replace("</s>", "")
+        # AnReu/math_pretrained_bert has ## in front of tokens that are not the first token of a word
+        # and it uses [CLS] and [SEP] as special tokens
+        if model_name in ["AnReu/math_pretrained_bert"]:
+            tokenized_question = tokenized_question.replace("[CLS]", "").replace("[SEP]", "").replace("##", "").replace(" ", "")
+        else:
+            tokenized_question = tokenized_question.replace(" ", "").replace("</s>", "")
         question_sentence = problem.question
-        for k, num in enumerate(num_list):
+        for k, num in enumerate(decoded_num_list):
             question_sentence = question_sentence.replace(f"number{k}", num).replace(" ", "")
-        return num_count, num_list, decoded_sentence, problem_sentence, tokenized_question, question_sentence
+
+        return decoded_num_list, decoded_sentence, problem_sentence, tokenized_question, question_sentence
 
     def test_translate2number(self):
         print(f"check models: ", end="")
-        for i, tokenizer in enumerate(self.tokenizers):
+        for i, dataset in enumerate(self.datasets):
             print("\033[32m" + self.models[i] + "\033[0m", end=", ")
+            # print(dataset.tokenizer(" <quant> ", return_tensors="pt").input_ids[0])
+            # print(dataset.quant_list_ids)
+            # print(dataset.tokenizer.convert_ids_to_tokens(dataset.tokenizer(" <quant> ", return_tensors="pt").input_ids[0]))
+            # print(dataset.tokenizer.convert_ids_to_tokens(dataset.quant_list_ids))
             problem_dict1 = {
                 'context': 'sophia finished number0 / number1 of a book . she calculated that she finished number2 more pages than she has yet to read .',
                 'question': 'how long is her book ?',
@@ -89,9 +89,8 @@ class TestDataset(TestCase):
                 'same_number_idx': [[0, 1], [2]],
             }
             problem1 = Problem(**problem_dict1)
-            num_count, decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = self.refine_test_translate2number(problem1, tokenizer, i)
-            # check whether num_count equals length of problem.numbers
-            self.assertEqual(num_count, len(problem1.numbers))
+            decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = \
+                self._prepare_test_translate2number(dataset, problem1)
             # check equality of decoded tokenized numbers and problem.numbers
             self.assertEqual(decoded_num_list, problem1.numbers)
             # check equality of decoded sentence and original problem sentence
@@ -110,10 +109,8 @@ class TestDataset(TestCase):
             }
             problem2 = Problem(**problem_dict2)
 
-            num_count, decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = self.refine_test_translate2number(
-                problem2, tokenizer, i)
-            # check whether num_count equals length of problem.numbers
-            self.assertEqual(num_count, len(problem2.numbers))
+            decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = \
+                self._prepare_test_translate2number(dataset, problem2)
             # check equality of decoded tokenized numbers and problem.numbers
             self.assertEqual(decoded_num_list, problem2.numbers)
             # check whether question_mask is correct after stripping whitespaces
@@ -136,10 +133,8 @@ class TestDataset(TestCase):
             }
             problem3 = Problem(**problem_dict3)
 
-            num_count, decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = self.refine_test_translate2number(
-                problem3, tokenizer, i)
-            # check whether num_count equals length of problem.numbers
-            self.assertEqual(num_count, len(problem3.numbers))
+            decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = \
+                self._prepare_test_translate2number(dataset, problem3)
             # check equality of decoded tokenized numbers and problem.numbers
             self.assertEqual(decoded_num_list, problem3.numbers)
             # check equality of decoded sentence and original problem sentence
@@ -165,10 +160,8 @@ class TestDataset(TestCase):
 
             problem4 = Problem(**problem_dict4)
 
-            num_count, decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = self.refine_test_translate2number(
-                problem4, tokenizer, i)
-            # check whether num_count equals length of problem.numbers
-            self.assertEqual(num_count, len(problem4.numbers))
+            decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = \
+                self._prepare_test_translate2number(dataset, problem4)
             # check equality of decoded tokenized numbers and problem.numbers
             self.assertEqual(decoded_num_list, problem4.numbers)
             # check equality of decoded sentence and original problem sentence
@@ -186,10 +179,8 @@ class TestDataset(TestCase):
                 "golden_argument": [["n0", "n1"], ["n2", "const_100"]]
             }
             problem5 = Problem(**problem_dict5)
-            num_count, decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = self.refine_test_translate2number(
-                problem5, tokenizer, i)
-            # check whether num_count equals length of problem.numbers
-            self.assertEqual(num_count, len(problem5.numbers))
+            decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = \
+                self._prepare_test_translate2number(dataset, problem5)
             # check equality of decoded tokenized numbers and problem.numbers
             self.assertEqual(decoded_num_list, problem5.numbers)
             # check equality of decoded sentence and original problem sentence
@@ -209,10 +200,8 @@ class TestDataset(TestCase):
                                     ["n5", "const_100"]]
             }
             problem6 = Problem(**problem_dict6)
-            num_count, decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = self.refine_test_translate2number(
-                problem6, tokenizer, i)
-            # check whether num_count equals length of problem.numbers
-            self.assertEqual(num_count, len(problem6.numbers))
+            decoded_num_list, decoded_problem, original_problem, decoded_question, original_question = \
+                self._prepare_test_translate2number(dataset, problem6)
             # check equality of decoded tokenized numbers and problem.numbers
             self.assertEqual(decoded_num_list, problem6.numbers)
             # check equality of decoded sentence and original problem sentence
@@ -221,27 +210,27 @@ class TestDataset(TestCase):
             self.assertEqual(decoded_question, original_question)
 
     def test_collate_function_all_dataset(self):
-        dataset = Dataset("data/processed/mathqa/test.json")
-        dataloader = DataLoader(dataset, batch_size=5, shuffle=False, collate_fn=dataset.collate_function, drop_last=True)
-        for i, batch in enumerate(dataloader):
-            # check if batch size is correct
-            self.assertEqual(batch.input_ids.shape[0], 5)
-            self.assertEqual(batch.attention_mask.shape[0], 5)
-            self.assertEqual(batch.question_mask.shape[0], 5)
-            self.assertEqual(batch.number_mask.shape[0], 5)
-            self.assertEqual(batch.equation_label.shape[0], 5)
-            self.assertEqual(batch.operator_label.shape[0], 5)
-            self.assertEqual(batch.operand_label.shape[0], 5)
-            # check if sequence length is correct
-            self.assertEqual(batch.input_ids.shape[1], batch.attention_mask.shape[1])
-            self.assertEqual(batch.input_ids.shape[1], batch.question_mask.shape[1])
-            self.assertEqual(batch.input_ids.shape[1], batch.number_mask.shape[1])
-            # check if equation label length is correct
-            self.assertEqual(batch.equation_label.shape[1], batch.operator_label.shape[1])
-            self.assertEqual(batch.equation_label.shape[1], batch.operand_label.shape[1])
-            # check if equation label arity is correct
-            self.assertEqual(batch.operator_label.shape[2], 1)
-            self.assertEqual(batch.equation_label.shape[2], batch.operator_label.shape[2] + batch.operand_label.shape[2])
+        for dataset in self.datasets:
+            dataloader = DataLoader(dataset, batch_size=5, shuffle=False, collate_fn=dataset.collate_function, drop_last=True)
+            for i, batch in enumerate(dataloader):
+                # check if batch size is correct
+                self.assertEqual(batch.input_ids.shape[0], 5)
+                self.assertEqual(batch.attention_mask.shape[0], 5)
+                self.assertEqual(batch.question_mask.shape[0], 5)
+                self.assertEqual(batch.number_mask.shape[0], 5)
+                self.assertEqual(batch.equation_label.shape[0], 5)
+                self.assertEqual(batch.operator_label.shape[0], 5)
+                self.assertEqual(batch.operand_label.shape[0], 5)
+                # check if sequence length is correct
+                self.assertEqual(batch.input_ids.shape[1], batch.attention_mask.shape[1])
+                self.assertEqual(batch.input_ids.shape[1], batch.question_mask.shape[1])
+                self.assertEqual(batch.input_ids.shape[1], batch.number_mask.shape[1])
+                # check if equation label length is correct
+                self.assertEqual(batch.equation_label.shape[1], batch.operator_label.shape[1])
+                self.assertEqual(batch.equation_label.shape[1], batch.operand_label.shape[1])
+                # check if equation label arity is correct
+                self.assertEqual(batch.operator_label.shape[2], 1)
+                self.assertEqual(batch.equation_label.shape[2], batch.operator_label.shape[2] + batch.operand_label.shape[2])
 
     def test_collate_function(self):
 

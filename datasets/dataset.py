@@ -56,26 +56,33 @@ class Dataset(data.Dataset):
 
         operator_list = self.config['operator_dict'].keys()
         constant_list = self.config['constant_list']
-
+        self.model_name = pretrained_model_name
         self.operator_encoder = LabelEncoder(operator_list,
                                              reserved_labels=['unknown'], unknown_index=0)
         self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list)
                                             , reserved_labels=['unknown'], unknown_index=0)
         self.constant2id = {constant: i for i, constant in enumerate(constant_list)}
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
-        self.plm_config = AutoConfig.from_pretrained(pretrained_model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.plm_config = AutoConfig.from_pretrained(self.model_name)
 
         # 문제에 등장하는 모든 숫자를 <quant>로 치환한 후 tokenize하기 때문에 tokenize가 끝난 후 숫자의 위치를 찾기 위해 사용
         # this idea is from Deductive MWP
-        self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-2]
+        # AnReu/math_pretrained_bert, does not include spaces in tokenization only exclude first and last token
+        if self.model_name in ["AnReu/math_pretrained_bert"]:
+            self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-1]
+        # witiko/mathberta, use 'Ġ' as space, exclude 2 of beggining and end.
+        elif self.model_name in ["wikito/mathberta"]:
+            self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-2]\
+        # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
+        # exclude 1 beggining(<s>) and 2 end(Ġ, <\s>).
+        else:
+            self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-2]
 
         self.features = []
         for problem_dict in tqdm(self.orig_dataset, desc="Converting Problem to Features "):
             problem = Problem(**problem_dict)
             feature = self._convert_to_feature(problem)
             self.features.append(feature)
-
-        print(self.tokenizer)
 
     def _convert_to_feature(self, problem: Problem) -> Feature:
         # ~~~~ number0 ~~~~ number2 ~~~~~~~ 문장을
@@ -92,16 +99,21 @@ class Dataset(data.Dataset):
         tokenized_problem, question_mask, number_mask, num_count = self._translate2number(tokenized_problem,
                                                                                           tokenized_context,
                                                                                           number_tensors,
-                                                                                          self.quant_list_ids)
+                                                                                          self.quant_list_ids,
+                                                                                          self.model_name)
         assert num_count == len(number_tensors), "number의 개수가 맞지 않음 {} != {}\n" \
                                                  "number list : {}\n" \
-                                                 "tokenized result : {}" \
-            .format(num_count, len(number_tensors), number_tensors,
-                    self.tokenizer.convert_ids_to_tokens(tokenized_problem[0]))
+                                                 "tokenized problem: {}\n" \
+                                                 "tokenized result : {}\n" \
+                                                 "problem context : {}\n" \
+                                                 "problem question : {}" \
+            .format(num_count, len(number_tensors), number_tensors, tokenized_problem,
+                    self.tokenizer.convert_ids_to_tokens(tokenized_problem[0]), problem_context, problem_question)
 
         attention_mask = torch.ones_like(tokenized_problem)
 
-        assert tokenized_problem.shape[1] == question_mask.shape[1] == number_mask.shape[1] == attention_mask.shape[1], \
+        assert tokenized_problem.shape[1] == question_mask.shape[1] == number_mask.shape[1] == \
+               attention_mask.shape[1], \
             "tokenized_problem.shape[1]: {}\n" \
             "question_mask.shape[1]: {}\n" \
             "number_mask.shape[1]: {}\n" \
@@ -141,12 +153,20 @@ class Dataset(data.Dataset):
                        operand_label=operand_label)
 
     @staticmethod
-    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None):
-        tokenized_problem = torch.cat(
-            [tokenized_problem[:, :tokenized_context.shape[1] - 1],
-             tokenized_problem[:, tokenized_context.shape[1] + 1:]],
-            dim=1)
-        tokenized_problem[0, :tokenized_context.shape[1]].tolist()
+    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None, model_name = None):
+        # AnReu/math_pretrained_bert only uses [SEP] once between sentences
+        if model_name == "AnReu/math_pretrained_bert":
+            tokenized_problem = torch.cat(
+                [tokenized_problem[:, :tokenized_context.shape[1] - 1],
+                 tokenized_problem[:, tokenized_context.shape[1]:]],
+                dim=1)
+        else:
+            tokenized_problem = torch.cat(
+                [tokenized_problem[:, :tokenized_context.shape[1] - 1],
+                 tokenized_problem[:, tokenized_context.shape[1] + 1:]],
+                dim=1)
+
+        # tokenized_problem[0, :tokenized_context.shape[1]].tolist()
         question_mask = torch.zeros_like(tokenized_problem)
         question_mask[:, tokenized_context.shape[1] - 1:] = 1
         number_mask = torch.zeros_like(tokenized_problem)
