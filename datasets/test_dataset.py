@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 import re
 from dataset import Dataset, Problem, Feature
+import torch.nn.functional as F
 import torch
 
 
@@ -21,7 +22,7 @@ class TestDataset(TestCase):
 
 
     def _prepare_test_translate2number(self, dataset, problem) -> (list, list, list, list, list):
-        model_name = dataset.model_name
+        model_name = dataset.pretrained_model_name
         tokenizer = dataset.tokenizer
         feature = dataset._convert_to_feature(problem)
         tokenized_problem = feature.input_ids
@@ -210,7 +211,9 @@ class TestDataset(TestCase):
             self.assertEqual(decoded_question, original_question)
 
     def test_collate_function_all_dataset(self):
+        print(f"check models: ", end="")
         for dataset in self.datasets:
+            print("\033[32m" + dataset.pretrained_model_name + "\033[0m", end=", ")
             dataloader = DataLoader(dataset, batch_size=5, shuffle=False, collate_fn=dataset.collate_function, drop_last=True)
             for i, batch in enumerate(dataloader):
                 # check if batch size is correct
@@ -233,6 +236,41 @@ class TestDataset(TestCase):
                 self.assertEqual(batch.equation_label.shape[2], batch.operator_label.shape[2] + batch.operand_label.shape[2])
 
     def test_collate_function(self):
+        print(f"check models: ", end="")
+        for dataset in self.datasets:
+            print("\033[32m" + dataset.pretrained_model_name + "\033[0m", end=", ")
+            max_input_ids = dataset.plm_config.max_position_embeddings
+            max_operators_size = dataset.config["max_operators_size"]
+            max_operator_operands_size = max(map(max, dataset.config['operator_dict'].values()))
 
-        pass
+            input_ids = torch.FloatTensor([1, 2, 3, 4, 5, 6]).view(1, 6)
+            attention_mask = torch.FloatTensor([1, 1, 1, 1, 1, 1]).view(1, 6)
+            question_mask = torch.FloatTensor([0, 0, 0, 1, 1, 1]).view(1, 6)
+            number_mask = torch.FloatTensor([0, 0, 1, 0, 0, 0]).view(1, 6)
+            equation_label = torch.FloatTensor([7, 8, 9, 10, 11, 12]).view(1, 2, 3)
+            operator_label = equation_label[:, :, :1]
+            operand_label = equation_label[:, :, 1:]
+            feature1 = Feature(input_ids, attention_mask, question_mask, number_mask, equation_label, operator_label, operand_label)
+            feature2 = Feature(-input_ids, -attention_mask, -question_mask, -number_mask, -equation_label, -operator_label, -operand_label)
+            collated = dataset.collate_function([feature1, feature2])
 
+            input_ids_ans = torch.Tensor([[1, 2, 3, 4, 5, 6], [-1, -2, -3, -4, -5, -6]]).view(2, 6)
+            attention_mask_ans = torch.Tensor([[1, 1, 1, 1, 1, 1], [-1, -1, -1, -1, -1, -1]]).view(2, 6)
+            question_mask_ans = torch.Tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, -1, -1, -1]]).view(2, 6)
+            number_mask_ans = torch.Tensor([[0, 0, 1, 0, 0, 0], [0, 0, -1, 0, 0, 0]]).view(2, 6)
+            equation_label_ans = torch.Tensor([[7, 8, 9, 10, 11, 12], [-7, -8, -9, -10, -11, -12]]).view(2, 2, 3)
+
+            input_ids_ans = F.pad(input_ids_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
+            attention_mask_ans = F.pad(attention_mask_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
+            question_mask_ans = F.pad(question_mask_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
+            number_mask_ans = F.pad(number_mask_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
+            equation_label_ans = F.pad(equation_label_ans, (0, max_operator_operands_size - 2, 0, max_operators_size - 2), value = dataset.tokenizer.pad_token_id)
+            operator_label_ans = equation_label_ans[:, :, :1]
+            operand_label_ans = equation_label_ans[:, :, 1:]
+
+            self.assertEqual(collated.input_ids.tolist(), input_ids_ans.tolist())
+            self.assertEqual(collated.attention_mask.tolist(), attention_mask_ans.tolist())
+            self.assertEqual(collated.question_mask.tolist(), question_mask_ans.tolist())
+            self.assertEqual(collated.number_mask.tolist(), number_mask_ans.tolist())
+            self.assertEqual(collated.operator_label.tolist(), operator_label_ans.tolist())
+            self.assertEqual(collated.operand_label.tolist(), operand_label_ans.tolist())
