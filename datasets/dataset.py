@@ -12,8 +12,7 @@ from transformers import AutoTokenizer, AutoConfig
 
 from dataclasses import dataclass
 
-from typing import List, Tuple
-import torch.nn.functional as F
+from typing import List
 
 BASE_PATH = Path(__file__).parent.parent
 
@@ -23,13 +22,13 @@ class Feature:
     # B : Batch size
     # S : Max length of tokenized problem text (Source)
     # T : Max length of tokenized equation (Target)
+    # A : Max length of operands (Arity)
     input_ids: torch.Tensor         # [B, S]
     attention_mask: torch.Tensor    # [B, S]
     question_mask: torch.Tensor     # [B, S]
     number_mask: torch.Tensor       # [B, S]
-    equation_label: torch.tensor    # [B, T, arity + 1]
-    operator_label: torch.tensor    # [B, T, 1]
-    operand_label: torch.tensor     # [B, T, arity], type : constant, number in problem, previous step result
+    operator_label: torch.tensor    # [B, T]
+    operand_label: torch.tensor     # [B, T, A], type : constant, number in problem, previous step result
 
 
 @dataclass
@@ -46,21 +45,21 @@ class Problem:
 class Dataset(data.Dataset):
     def __init__(self,
                  data_path: str = "data/processed/mathqa/train.json",
-                 config_path : str = "data/processed/mathqa/config.json",
+                 config_path: str = "data/processed/mathqa/config.json",
                  pretrained_model_name: str = "roberta-base",
                  ):
         with open(Path(BASE_PATH, data_path), 'r') as f:
             self.orig_dataset = json.load(f)
         with open(Path(BASE_PATH, config_path), 'r') as f:
             self.config = json.load(f)
-
-        operator_list = self.config['operator_dict'].keys()
-        constant_list = self.config['constant_list']
+        # added 'PAD' token to operator and constant list
+        operator_list = ['PAD'] + list(self.config['operator_dict'].keys())
+        constant_list = ['PAD'] + list(self.config['constant_list'])
         self.pretrained_model_name = pretrained_model_name
         self.operator_encoder = LabelEncoder(operator_list,
                                              reserved_labels=['unknown'], unknown_index=0)
-        self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list)
-                                            , reserved_labels=['unknown'], unknown_index=0)
+        self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list),
+                                            reserved_labels=['unknown'], unknown_index=0)
         self.constant2id = {constant: i for i, constant in enumerate(constant_list)}
         self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
         self.plm_config = AutoConfig.from_pretrained(self.pretrained_model_name)
@@ -72,8 +71,8 @@ class Dataset(data.Dataset):
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-1]
         # witiko/mathberta, use 'Ġ' as space, exclude 2 of beggining and end.
         elif self.pretrained_model_name in ["wikito/mathberta"]:
-            self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-2]\
-        # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
+            self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-2] \
+                # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
         # exclude 1 beggining(<s>) and 2 end(Ġ, <\s>).
         else:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-2]
@@ -123,37 +122,27 @@ class Dataset(data.Dataset):
                         attention_mask.shape[1])
 
         # equation label
-        equation_label = self._convert_equation_label(problem.equation)
-        operator_label, operand_label = self._split_equation_label(equation_label)
+        operator_label, operand_label = self._convert_equation_label(problem.equation)
 
-        assert len(equation_label.shape) == len(operator_label.shape) == len(operand_label.shape) == 3, \
-            "dimension of labels must be 3"
+        assert len(operator_label.shape) == 2 and len(operand_label.shape) == 3, \
+            "dimension of operator_label must be 2, operand_label must be 3"
 
-        assert equation_label.shape[:2] == operator_label.shape[:2] == operand_label.shape[:2], \
-            "equation_label.shape[0]: {}, equation_label.shape[1]: {}\n" \
+        assert operator_label.shape[:2] == operand_label.shape[:2], \
             "operator_label.shape[0]: {}, operator_label.shape[1]: {}\n" \
             "operand_label.shape[0]: {}, operand_label.shape[1]: {}\n" \
-            "equation_label, operator_label, operand_label must have same 1st dim" \
-                .format(equation_label.shape[0], equation_label.shape[1], operator_label.shape[0],
-                        operator_label.shape[1], operand_label.shape[0], operand_label.shape[1])
-
-        assert equation_label.shape[2] == operator_label.shape[2] + operand_label.shape[2], \
-            "sum of 3rd dim of operator_label, operand_label must be equal to operation_label 3rd dim\n" \
-            "equation_label.shape[2]: {}\n" \
-            "operator_label.shape[2]: {}\n" \
-            "operand_label.shape[2]: {}" \
-                .format(equation_label.shape[2], operator_label.shape[2], operand_label.shape[2])
+            "operator_label, operand_label must have same 1st dim" \
+                .format(operator_label.shape[0], operator_label.shape[1], operand_label.shape[0],
+                        operand_label.shape[1])
 
         return Feature(input_ids=tokenized_problem,
                        attention_mask=attention_mask,
                        question_mask=question_mask,
                        number_mask=number_mask,
-                       equation_label=equation_label,
                        operator_label=operator_label,
                        operand_label=operand_label)
 
     @staticmethod
-    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None, model_name = None):
+    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None, model_name=None):
         # AnReu/math_pretrained_bert only uses [SEP] once between sentences
         if model_name == "AnReu/math_pretrained_bert":
             tokenized_problem = torch.cat(
@@ -209,29 +198,31 @@ class Dataset(data.Dataset):
 
             l_space = "" if problem_text[find_number.start() + append_idx - 1] == " " else " "
             r_space = "" if problem_text[find_number.end() + append_idx] == " " else " "
-            problem_text = problem_text[:find_number.start() + append_idx] + \
-                           l_space + "<quant>" + r_space + problem_text[find_number.end() + append_idx:]
+            problem_text = problem_text[:find_number.start() + append_idx] + l_space + "<quant>" + r_space + \
+                problem_text[find_number.end() + append_idx:]
 
             append_idx = append_idx + len("<quant>") - len(find_number.group())
 
         return problem_text
 
-    def _convert_equation_label(self, equation: list[list[str]]) -> torch.Tensor:
+    def _convert_equation_label(self, equation: list[list[str]]) -> tuple[torch.Tensor, torch.Tensor]:
         # maximum arity of equation: max(operands + 1(operator), for all equation[i])
         max_arity = 0
         for i in range(len(equation)):
             max_arity = max(max_arity, len(equation[i]) - 1)
-        equation_label = torch.zeros((len(equation), max_arity + 1))
+        # [T]
+        operator_label = torch.full([len(equation)], self.operator_encoder.encode("PAD").item())
+        operand_label = torch.full([len(equation), max_arity], self.operand_encoder.encode("PAD").item())
 
         for i in range(len(equation)):
             for j in range(len(equation[i])):
                 if j == 0:
-                    equation_label[i][j] = self.operator_encoder.encode(equation[i][j])
+                    operator_label[i] = self.operator_encoder.encode(equation[i][j])
                 else:
-                    equation_label[i][j] = self.operand_encoder.encode(equation[i][j])
+                    operand_label[i][j - 1] = self.operand_encoder.encode(equation[i][j])
 
-        # [T, 3] -> [B, T, max_arity + 1]
-        return equation_label.unsqueeze(dim=0)
+        # [T] -> [B, T], [T, A] -> [B, T, A]
+        return operator_label.unsqueeze(dim=0), operand_label.unsqueeze(dim=0)
 
     def _get_available_operand_list(self, constant_list: List[str]) -> List[str]:
         ret = []
@@ -245,17 +236,10 @@ class Dataset(data.Dataset):
 
         assert len(ret) == max_numbers_size + (max_operators_size - 1) + len(constant_list), \
             "length of ret: {}, max_numbers_size: {}, max_operators_size: {}, len(constant_list): {}\n" \
-            "length of available operand list must be equal to max_numbers_size + max_operators_size - 1 + len(constant_list)" \
-                .format(len(ret), max_numbers_size, max_operators_size, len(constant_list))
+            "length of available operand list must be equal to the sum of each component" \
+            .format(len(ret), max_numbers_size, max_operators_size, len(constant_list))
 
         return ret
-
-    def _split_equation_label(self, equation_label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # TODO:
-        operator_label: torch.Tensor = equation_label[:,:,:1] # [B, T, 1]
-        operand_label: torch.Tensor = equation_label[:,:,1:] # [B, T, 2]
-
-        return operator_label, operand_label
 
     def __getitem__(self, index) -> Feature:
         return self.features[index]
@@ -273,18 +257,17 @@ class Dataset(data.Dataset):
         attention_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
         question_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
         number_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
-        equation_label = torch.full((bsz, max_operators_size, max_operator_operands_size + 1),
-                                    self.tokenizer.pad_token_id)
+        operator_label = torch.full((bsz, max_operators_size), self.operator_encoder.encode("PAD").item())
+        operand_label = torch.full((bsz, max_operators_size, max_operator_operands_size),
+                                   self.operand_encoder.encode("PAD").item())
 
         for i in range(bsz):
             input_ids[i, :batch[i].input_ids.shape[1]] = batch[i].input_ids[0]
             attention_mask[i, :batch[i].attention_mask.shape[1]] = batch[i].attention_mask[0]
             question_mask[i, :batch[i].question_mask.shape[1]] = batch[i].question_mask[0]
             number_mask[i, :batch[i].number_mask.shape[1]] = batch[i].number_mask[0]
-            equation_label[i, :batch[i].equation_label.shape[1], :batch[i].equation_label.shape[2]] = \
-                batch[i].equation_label[0]
+            operator_label[i, :batch[i].operator_label.shape[1]] = batch[i].operator_label[0]
+            operand_label[i, :batch[i].operand_label.shape[1], :batch[i].operand_label.shape[2]] = \
+                batch[i].operand_label[0]
 
-        operator_label, operand_label = self._split_equation_label(equation_label)
-
-        return Feature(input_ids, attention_mask, question_mask, number_mask, equation_label, operator_label,
-                       operand_label)
+        return Feature(input_ids, attention_mask, question_mask, number_mask, operator_label, operand_label)
