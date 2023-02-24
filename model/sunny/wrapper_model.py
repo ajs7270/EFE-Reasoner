@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 import pytorch_lightning as pl
-from transformers import AutoModel, AutoConfig
+from transformers import AutoModel, AutoConfig, get_cosine_schedule_with_warmup
 
 from datasets.dataset import Feature
 from model.sunny.aware_decoder import AwareDecoder
@@ -46,14 +46,22 @@ class WrapperModel(pl.LightningModule):
 
         return operator_logit, operand_logit  # [[B, T, 1], [B, T, A]] : Operator, Operand prediction
 
-    def training_step(self, batch: Feature, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+    def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        pass
+
+    def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        pass
+
+    def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         gold_operator_label = batch.operator_label
         gold_operand_label = batch.operand_label
 
         operator_logit, operand_logit = self(batch)
 
-        # TODO: Calculate loss
-        loss = torch.Tensor(0)
+        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
+        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+
+        loss = operator_loss + operand_loss
 
         return loss
 
