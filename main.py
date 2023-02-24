@@ -11,7 +11,7 @@ from pytorch_lightning import Trainer
 from lightning_fabric import seed_everything
 from datasets.dataset import Dataset
 from argparse import ArgumentParser
-from model.sunny import WrapperModel
+from model.sunny.wrapper_model import WrapperModel
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 parser = ArgumentParser("Train for MathQA or SVAMP")
