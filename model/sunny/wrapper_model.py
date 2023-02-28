@@ -44,22 +44,25 @@ class WrapperModel(pl.LightningModule):
         encoder_output = self.encoder(x.input_ids).last_hidden_state
         operator_logit, operand_logit = self.decoder(encoder_output)
 
-        return operator_logit, operand_logit  # [[B, T, 1], [B, T, A]] : Operator, Operand prediction
+        return operator_logit, operand_logit  # [[B, T, N_O], [B, T, N_D]] : Operator, Operand prediction
 
-    def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        pass
+    def training_step(self, batch: Feature, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
+        gold_operator_label = batch.operator_label     #[B, T]
+        gold_operand_label = batch.operand_label       #[B, T, A]
 
-    def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        pass
+        operator_logit, operand_logit = self(batch)    #[B, T, N_O], [B, T, A, N_D]
 
-    def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        gold_operator_label = batch.operator_label
-        gold_operand_label = batch.operand_label
+        bsz, max_operator_len, max_arity, _ = operand_logit.shape
 
-        operator_logit, operand_logit = self(batch)
+        operator_logit_flatten = torch.reshape(operator_logit, (bsz*max_operator_len,-1))  #[B*T, N_O]
+        gold_operator_label_flatten = torch.reshape(gold_operator_label, (-1,))            #[B*T]
 
-        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
-        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+        operand_logit_flatten = torch.reshape(torch.reshape(operand_logit, (bsz, max_operator_len * max_arity, -1)),
+                                                            (bsz * max_operator_len * max_arity, -1))  #[B*T*A, N_D]
+        gold_operand_label_flatten = torch.reshape(torch.reshape(gold_operand_label, (bsz, -1)),(-1,)) #[B*T*A]
+
+        operator_loss = nn.CrossEntropyLoss(reduction = "none")(operator_logit_flatten, gold_operator_label_flatten)
+        operand_loss = nn.CrossEntropyLoss(reduction = "none")(operand_logit_flatten, gold_operand_label_flatten)
 
         loss = operator_loss + operand_loss
 
