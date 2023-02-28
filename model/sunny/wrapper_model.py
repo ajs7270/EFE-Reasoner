@@ -29,11 +29,12 @@ class WrapperModel(pl.LightningModule):
         self.metric = nn.CrossEntropyLoss()
 
         # set encoder
-        self.encoder = AutoModel.from_pretrained(self.bert_model)
-        self.config = AutoConfig.from_pretrained(self.bert_model)
+        self.encoder = AutoModel.from_pretrained(self.hparams["bert_model"])
+
+        self.config = AutoConfig.from_pretrained(self.hparams["bert_model"])
 
         # pretrained language model은 fine-tuning하고 싶지 않을 때
-        if not self.fine_tune:
+        if not self.hparams["fine_tune"]:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
@@ -47,10 +48,13 @@ class WrapperModel(pl.LightningModule):
         return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
 
     def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        bsz, max_operator_len,  = logits.shape #[B, T, N_O]
+        bsz, max_operator_len, _ = logits.shape #[B, T, N_O]
 
         operator_logit_flatten = torch.reshape(logits, (bsz * max_operator_len, -1))  # [B*T, N_O]
         gold_operator_label_flatten = torch.reshape(labels, (-1,))  # [B*T]
+
+        assert operator_logit_flatten.shape[0] == gold_operator_label_flatten.shape[0]
+        assert len(operator_logit_flatten.shape) == 2 and len(gold_operator_label_flatten.shape) == 1
 
         return nn.CrossEntropyLoss(reduction="none")(operator_logit_flatten, gold_operator_label_flatten)
 
@@ -60,7 +64,8 @@ class WrapperModel(pl.LightningModule):
         operand_logit_flatten = torch.reshape(torch.reshape(logits, (bsz, max_operator_len * max_arity, -1)),
                                               (bsz * max_operator_len * max_arity, -1))  # [B*T*A, N_D]
         gold_operand_label_flatten = torch.reshape(torch.reshape(labels, (bsz, -1)), (-1,))  # [B*T*A]
-
+        assert operand_logit_flatten.shape[0] == gold_operand_label_flatten.shape[0]
+        assert len(operand_logit_flatten.shape) == 2 and len(gold_operand_label_flatten.shape) == 1
         return nn.CrossEntropyLoss(reduction="none")(operand_logit_flatten, gold_operand_label_flatten)
 
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
