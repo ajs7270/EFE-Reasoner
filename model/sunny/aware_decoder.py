@@ -19,6 +19,7 @@ class AwareDecoder(nn.Module):
                 attention_mask: torch.Tensor,               # [B, S] : Language model attention mask
                 question_mask: torch.Tensor,                # [B, S] : Language model question mask
                 number_mask: torch.Tensor,                  # [B, S] : Language model number mask
-                ) -> tuple[torch.Tensor, torch.Tensor] :    # [[B, T, 1, N_O], [B, T, A, N_D]] : Operator, Operand prediction
+                ) -> tuple[torch.Tensor, torch.Tensor] :    # [[B, T, N_O + 1], [B, T, A, N_D + 1]]
+                                                            # : Operator, Operand prediction, + 1 is padding
         pass
 

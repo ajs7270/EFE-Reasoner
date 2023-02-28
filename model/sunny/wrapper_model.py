@@ -45,10 +45,10 @@ class WrapperModel(pl.LightningModule):
         encoder_output = self.encoder(x.input_ids).last_hidden_state
         operator_logit, operand_logit = self.decoder(encoder_output)
 
-        return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
+        return operator_logit, operand_logit  # [[B, T, N_O + 1], [B, T, A, N_D + 1]] : Operator, Operand prediction
 
     def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        bsz, max_operator_len, _ = logits.shape #[B, T, N_O]
+        bsz, max_operator_len, _ = logits.shape #[B, T, N_O + 1]
 
         operator_logit_flatten = torch.reshape(logits, (bsz * max_operator_len, -1))  # [B*T, N_O]
         gold_operator_label_flatten = torch.reshape(labels, (-1,))  # [B*T]
@@ -69,10 +69,10 @@ class WrapperModel(pl.LightningModule):
         return nn.CrossEntropyLoss(reduction="none")(operand_logit_flatten, gold_operand_label_flatten)
 
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        gold_operator_label = batch.operator_label
-        gold_operand_label = batch.operand_label
+        gold_operator_label = batch.operator_label - 1 # 0 is reserved for unknown, 1 is padding included in loss
+        gold_operand_label = batch.operand_label - 1 # 0 is reserved for unknown, 1 is padding included in loss
 
-        operator_logit, operand_logit = self(batch)    #[B, T, N_O], [B, T, A, N_D]
+        operator_logit, operand_logit = self(batch)    #[B, T, N_O + 1], [B, T, A, N_D + 1]
 
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
