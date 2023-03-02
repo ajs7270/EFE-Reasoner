@@ -60,11 +60,12 @@ class Dataset(data.Dataset):
                                              reserved_labels=['unknown'], unknown_index=0)
         self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list),
                                             reserved_labels=['unknown'], unknown_index=0)
-        self.constant2id = {constant: i for i, constant in enumerate(constant_list)}
-        self.constant_ids = None # constant tokenize 해서 => [[100## ,##0], [] ]
-        self.operator_ids = None # operator tokenize 해서 => [[ad#:10 ,#d:2], [] ]
         self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
         self.plm_config = AutoConfig.from_pretrained(self.pretrained_model_name)
+        self.constant_ids = [self.tokenizer(constant, return_tensors="pt").input_ids[0][1:-1]
+                             for constant in constant_list]  # exclude first and last <s>, </s> tokens
+        self.operator_ids = [self.tokenizer(operator, return_tensors="pt").input_ids[0][1:-1]
+                             for operator in operator_list]  # exclude first and last <s>, </s> tokens
 
         # 문제에 등장하는 모든 숫자를 <quant>로 치환한 후 tokenize하기 때문에 tokenize가 끝난 후 숫자의 위치를 찾기 위해 사용
         # this idea is from Deductive MWP

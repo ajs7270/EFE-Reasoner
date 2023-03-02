@@ -37,14 +37,29 @@ class WrapperModel(pl.LightningModule):
         if not self.hparams["fine_tune"]:
             for param in self.encoder.parameters():
                 param.requires_grad = False
-
+        # TODO: fetch constant_ids, operator_ids from dataset
         # set constant_list_embedding
-        constant_vectors = None # Tensor [N_C, H*2] or [N_C, H]
+        constant_vectors = self._get_vectors(constant_ids, True) # Tensor [N_C, H*2] or [N_C, H]
         # set operator_list_embedding
-        operator_vectors = None # Tensor [N_O, H*2] or [N_O, H]
+        operator_vectors = self._get_vectors(operator_ids, True) # Tensor [N_O, H*2] or [N_O, H]
 
         # set decoder
         self.decoder = AwareDecoder(input_hidden_dim=self.config.hidden_size)
+
+    def _get_vectors(self, ids_list: list[torch.Tensor], concat: bool) -> torch.Tensor:
+        # return the sum or concatenation of first and last hidden_state of constant_ids
+        # ids_list can be constant_ids or operator_ids
+        vectors = [] # list(torch.Tensor[H]) or list(torch.Tensor[H*2]) according to concat
+        for ids in ids_list:
+            if concat:
+                vectors.append(torch.cat((self.encoder(ids.unsqueeze(0)).last_hidden_state[0, 0, :]),
+                               self.encoder(ids.unsqueeze(0)).last_hidden_state[0, -1, :]))
+            else:
+                vectors.append(self.encoder(ids.unsqueeze(0)).last_hidden_state[0, 0, :] +
+                               self.encoder(ids.unsqueeze(0)).last_hidden_state[0, -1, :])
+
+        return torch.stack(vectors) # [N_C, H*2] or [N_C, H] according to concat
+
 
     def forward(self, x: Feature):
         encoder_output = self.encoder(x.input_ids).last_hidden_state
