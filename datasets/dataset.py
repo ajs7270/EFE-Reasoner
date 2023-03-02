@@ -61,6 +61,8 @@ class Dataset(data.Dataset):
         self.operand_encoder = LabelEncoder(self._get_available_operand_list(constant_list),
                                             reserved_labels=['unknown'], unknown_index=0)
         self.constant2id = {constant: i for i, constant in enumerate(constant_list)}
+        self.constant_ids = None # constant tokenize 해서 => [[100## ,##0], [] ]
+        self.operator_ids = None # operator tokenize 해서 => [[ad#:10 ,#d:2], [] ]
         self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
         self.plm_config = AutoConfig.from_pretrained(self.pretrained_model_name)
 

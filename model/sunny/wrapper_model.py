@@ -38,6 +38,11 @@ class WrapperModel(pl.LightningModule):
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
+        # set constant_list_embedding
+        constant_vectors = None # Tensor [N_C, H*2] or [N_C, H]
+        # set operator_list_embedding
+        operator_vectors = None # Tensor [N_O, H*2] or [N_O, H]
+
         # set decoder
         self.decoder = AwareDecoder(input_hidden_dim=self.config.hidden_size)
 
