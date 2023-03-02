@@ -122,6 +122,12 @@ def main():
     model = WrapperModel(
         args.bert_model,
         args.fine_tune,
+        args.lr,
+        args.weight_decay,
+        args.warmup_ratio,
+        args.optimizer,
+        train_dataset.constant_ids,
+        train_dataset.operator_ids,
     )
     # ========================================
 

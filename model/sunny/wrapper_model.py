@@ -17,7 +17,9 @@ class WrapperModel(pl.LightningModule):
                  lr: float = 1e-5,
                  weight_decay: float = 0.0,
                  warmup_ratio: float = 0.1,
-                 optimizer: str = "adamw"
+                 optimizer: str = "adamw",
+                 constant_ids: list[torch.Tensor] = None,
+                 operator_ids: list[torch.Tensor] = None,
                  ):
         super(WrapperModel, self).__init__()
 
@@ -30,14 +32,13 @@ class WrapperModel(pl.LightningModule):
 
         # set encoder
         self.encoder = AutoModel.from_pretrained(self.hparams["bert_model"])
-
         self.config = AutoConfig.from_pretrained(self.hparams["bert_model"])
 
         # pretrained language model은 fine-tuning하고 싶지 않을 때
         if not self.hparams["fine_tune"]:
             for param in self.encoder.parameters():
                 param.requires_grad = False
-        # TODO: fetch constant_ids, operator_ids from dataset
+
         # set constant_list_embedding
         constant_vectors = self._get_vectors(constant_ids, True) # Tensor [N_C, H*2] or [N_C, H]
         # set operator_list_embedding
