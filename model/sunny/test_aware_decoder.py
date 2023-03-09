@@ -12,7 +12,6 @@ class AwareDecoderTest(TestCase):
     max_arity = 3
     max_number_size = 5
     label_pad_id = 1
-    label_unk_id = 0
     concat = True
 
     const_vectors = torch.rand(constant_num, input_hidden_dim * 2)
@@ -27,7 +26,6 @@ class AwareDecoderTest(TestCase):
                          max_equation=max_equation,
                          max_number_size=max_number_size,
                          label_pad_id=label_pad_id,
-                         label_unk_id=label_unk_id,
                          concat=concat)
 
     def test_forward(self):
