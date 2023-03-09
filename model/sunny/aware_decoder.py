@@ -27,12 +27,12 @@ class AwareDecoder(nn.Module):
 
         # operand candidate vector : const vector
         # N_C : number of constant
-        self.const_vector = const_vector  # [N_C, H] or [N_C, H*2] regarding concat
+        self.const_vector = nn.Parameter(const_vector)  # [N_C, H] or [N_C, H*2] regarding concat
         assert self.const_num == self.const_vector.size(0)
 
         # operator candidate vector
         # N_O : number of operator
-        self.operator_vector = operator_vector  # [N_O, H] or [N_O, H*2] regarding concat
+        self.operator_vector = nn.Parameter(operator_vector)  # [N_O, H] or [N_O, H*2] regarding concat
         assert self.operator_num == self.operator_vector.size(0)
 
         # operator, operand projection layer
