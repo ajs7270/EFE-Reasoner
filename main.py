@@ -28,7 +28,7 @@ parser.add_argument("--num_workers", type=int, default=1, help="number of worker
 
 # trainer argument
 parser.add_argument("--devices", type=int, default=1, help="number of workers for dataloader")
-parser.add_argument("--accelerator", type=str, default="cpu", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
+parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                     help="choice computing device")
 parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
 parser.add_argument("--max_epochs", type=int, default=150, help="max epoch")
