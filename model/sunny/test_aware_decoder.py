@@ -30,6 +30,18 @@ class AwareDecoderTest(TestCase):
                          label_unk_id=label_unk_id,
                          concat=concat)
 
+    def test_forward(self):
+        input = torch.rand(5, 11, 512)
+        number_mask = torch.Tensor([[1, 1, 1, 0, 0, 0, 2, 2, 2, 0, 0],
+                                    [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                                    [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+                                    [1, 1, 0, 2, 2, 0, 3, 3, 0, 0, 0]])
+        attention_mask = torch.rand(5, 11)
+        question_mask = torch.rand(5, 11)
+        self.model(input=input, attention_mask=attention_mask,
+                   question_mask=question_mask, number_mask=number_mask)
+
     def test__get_num_vec(self):
         input = torch.rand(5, 11, 512)
         number_mask = torch.Tensor([[1, 1, 1, 0, 0, 0, 2, 2, 2, 0, 0],
