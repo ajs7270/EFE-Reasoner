@@ -93,15 +93,16 @@ class AwareDecoder(nn.Module):
         # operand candidate vector setup : const vector(dataset 만들때 생성해서, 이 모델의 init 단계에서 설정), number vector, previous result vector
         # self.number_vector = torch.zeros(input.size(0), self.max_number_size,
         #                                  self.hidden_dim * 2 if self.concat else self.hidden_dim)
-        self.number_vector = nn.Parameter(self._get_num_vec(input, number_mask, self.max_number_size, concat=self.concat))  # [N_Q, H] or [N_Q, H*2]
-        self.previous_result_vector = nn.Parameter(torch.zeros(input.size(0), self.max_equation, self.hidden_dim))  # [B, T, H]
+        device = input.device
+        self.number_vector = self._get_num_vec(input, number_mask, self.max_number_size, concat=self.concat).to(device)  # [N_Q, H] or [N_Q, H*2]
+        self.previous_result_vector = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)  # [B, T, H]
 
         # Initialize return values
-        operators_logit = nn.Parameter(torch.zeros(input.size(0), self.max_equation, self.operator_num))
-        operands_logit = nn.Parameter(torch.zeros(input.size(0), self.max_equation, self.max_arity,
-                                     self.const_num + self.max_number_size + self.max_equation))  # PAD(None) + CONST + NUM + PREVIOUS RESULT
-        operators_prediction_vectors = nn.Parameter(torch.zeros(input.size(0), self.max_equation, self.hidden_dim))
-        operands_prediction_vectors = nn.Parameter(torch.zeros(input.size(0), self.max_equation, self.max_arity, self.hidden_dim))
+        operators_logit = torch.zeros(input.size(0), self.max_equation, self.operator_num).to(device)
+        operands_logit = torch.zeros(input.size(0), self.max_equation, self.max_arity,
+                                     self.const_num + self.max_number_size + self.max_equation).to(device)  # PAD(None) + CONST + NUM + PREVIOUS RESULT
+        operators_prediction_vectors = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)
+        operands_prediction_vectors = torch.zeros(input.size(0), self.max_equation, self.max_arity, self.hidden_dim).to(device)
 
         # Equation prediction
         for i in range(self.max_equation):
