@@ -22,6 +22,7 @@ class WrapperModel(pl.LightningModule):
                  operator_ids: list[torch.Tensor] = None,
                  label_pad_id: int = 1,
                  concat: bool = True,
+                 dataset_config = None
                  ):
         super(WrapperModel, self).__init__()
 
@@ -48,8 +49,14 @@ class WrapperModel(pl.LightningModule):
 
         # set decoder
         self.decoder = AwareDecoder(input_hidden_dim=self.config.hidden_size,
-                                    constant_vectors=constant_vectors,
-                                    operator_vectors=operator_vectors,
+                                    operator_vector=operator_vectors,
+                                    const_vector=constant_vectors,
+                                    operator_num=len(operator_ids),
+                                    const_num=len(constant_ids),
+                                    max_number_size=dataset_config["max_numbers_size"],
+                                    max_equation=dataset_config["max_operators_size"],
+                                    max_arity=max(map(max, dataset_config['operator_dict'].values())),
+                                    label_pad_id=label_pad_id,
                                     concat=concat)
 
     def _get_vectors(self, ids_list: list[torch.Tensor], concat: bool) -> torch.Tensor:
