@@ -29,21 +29,22 @@ parser.add_argument("--configure_path", type=str, default="data/processed/mathqa
                     help="path to the configure file")
 parser.add_argument("--train_batch_size", type=int, default=32, help="batch size")
 parser.add_argument("--test_batch_size", type=int, default=32, help="batch size")
+parser.add_argument("--num_workers", type=int, default=1, help="number of workers for dataloader")
 
 # trainer argument
-parser.add_argument("--devices", type=int, default=4, help="number of workers for dataloader")
-parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
+parser.add_argument("--devices", type=int, default=1, help="number of workers for dataloader")
+parser.add_argument("--accelerator", type=str, default="cpu", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                     help="choice computing device")
 parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
-parser.add_argument("--max_epochs", type=int, default=10, help="max epoch")
+parser.add_argument("--max_epochs", type=int, default=150, help="max epoch")
 parser.add_argument("--num_nodes", type=int, default=1, help="Number of GPU nodes for distributed training")
-parser.add_argument("--precision", type=Union[int, str], default="16-mixed",
-                    choices=[16, 32, 64, "16-mixed", "bf16-mixed"],
+parser.add_argument("--precision", default="bf16",
+                    choices=['64', '32', '16', 'bf16', 64, 32, 16],
                     help="precision")
-parser.add_argument("--profiler", type=Optional[str], default="simple", choices=[None, "simple", "advanced"],
+parser.add_argument("--profiler", default="simple", choices=[None, "simple", "advanced"],
                     help="profiler")
 parser.add_argument("--enable_progress_bar", type=bool, default=True, help="enable progress bar")
-parser.add_argument("--strategy", type=str, default="ddp", choices=["ddp", "fsdp"],
+parser.add_argument("--strategy", type=str, default=None, choices=["ddp", "fsdp"],
                     help="strategy for distributed training(ddp: Data-parallel fsdp: model-parallel)")
 
 # parser.add_argument("--model_save_dir", type=str, default="model_save", help="model save directory")
@@ -85,17 +86,9 @@ def main():
 
     # set dataset
     # ========================================
-    def seed_worker(worker_id):
-        worker_seed = torch.initial_seed() % 2 ** 32
-        np.random.seed(worker_seed)
-        random.seed(worker_seed)
-
-    g = torch.Generator()
-    g.manual_seed(0)
-
     train_dataset = Dataset(args.train_data_path, args.configure_path, args.bert_model)
     dev_dataset = Dataset(args.dev_data_path, args.configure_path, args.bert_model)
-    test_dataset = Dataset(args.test_data_path, args.configure_path, args.bert_model)
+    #test_dataset = Dataset(args.test_data_path, args.configure_path, args.bert_model)
     # ========================================
 
     # set dataloader
@@ -104,16 +97,17 @@ def main():
                                   batch_size=args.train_batch_size,
                                   shuffle=True,
                                   num_workers=args.num_workers,
-                                  worker_init_fn=seed_worker,
-                                  generator=g)
-    dev_dataloader = DataLoader(dev_dataset, batch_size=args.test_batch_size, shuffle=False,
+                                  collate_fn=train_dataset.collate_function)
+    dev_dataloader = DataLoader(dev_dataset,
+                                batch_size=args.test_batch_size,
+                                shuffle=False,
                                 num_workers=args.num_workers,
-                                worker_init_fn=seed_worker,
-                                generator=g)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False,
-                                 num_workers=args.num_workers,
-                                 worker_init_fn=seed_worker,
-                                 generator=g)
+                                collate_fn=dev_dataset.collate_function)
+    # test_dataloader = DataLoader(test_dataset,
+    #                              batch_size=args.test_batch_size,
+    #                              shuffle=False,
+    #                              num_workers=args.num_workers,
+    #                              collate_fn=test_dataset.collate_function)
     # ========================================
 
     # set model
@@ -127,6 +121,7 @@ def main():
         args.optimizer,
         train_dataset.constant_ids,
         train_dataset.operator_ids,
+        num_training_steps=len(train_dataloader) * args.max_epochs,
         label_pad_id = train_dataset.pad_id,
         concat=True,
         dataset_config = train_dataset.config
@@ -135,10 +130,10 @@ def main():
 
     # set Trainer
     trainer = Trainer.from_argparse_args(args)
-    trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=dev_dataloader)
+    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=dev_dataloader)
     # ========================================
 
-    trainer.predict(test_dataset)
+    #trainer.predict(test_dataset)
 
 
 if __name__ == "__main__":

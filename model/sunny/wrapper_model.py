@@ -4,6 +4,8 @@ import torch
 from torch import nn
 
 import pytorch_lightning as pl
+from torch.optim import Optimizer
+# from torch.optim.lr_scheduler import _LRScheduler
 from transformers import AutoModel, AutoConfig, get_cosine_schedule_with_warmup
 
 from datasets.dataset import Feature
@@ -20,6 +22,7 @@ class WrapperModel(pl.LightningModule):
                  optimizer: str = "adamw",
                  constant_ids: list[torch.Tensor] = None,
                  operator_ids: list[torch.Tensor] = None,
+                 num_training_steps: int = 150000,
                  label_pad_id: int = 1,
                  concat: bool = True,
                  dataset_config = None
@@ -65,8 +68,9 @@ class WrapperModel(pl.LightningModule):
         vectors = [] # list(torch.Tensor[H]) or list(torch.Tensor[H*2]) according to concat
         for ids in ids_list:
             if concat:
-                vectors.append(torch.cat((self.encoder(ids.unsqueeze(0)).last_hidden_state[0, 0, :]),
-                               self.encoder(ids.unsqueeze(0)).last_hidden_state[0, -1, :]))
+                # 만약 첫번째 id와 마지막 id가 같은 const_XXX의 경우에는 구분할 수 없다는 문제가 존재
+                vectors.append(torch.cat((self.encoder(ids.unsqueeze(0)).last_hidden_state[0, 0, :],
+                               self.encoder(ids.unsqueeze(0)).last_hidden_state[0, -1, :])))
             else:
                 vectors.append(self.encoder(ids.unsqueeze(0)).last_hidden_state[0, 0, :] +
                                self.encoder(ids.unsqueeze(0)).last_hidden_state[0, -1, :])
@@ -78,10 +82,10 @@ class WrapperModel(pl.LightningModule):
         encoder_output = self.encoder(x.input_ids).last_hidden_state
         operator_logit, operand_logit = self.decoder(encoder_output)
 
-        return operator_logit, operand_logit  # [[B, T, N_O + 1], [B, T, A, N_D + 1]] : Operator, Operand prediction
+        return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
 
     def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        bsz, max_operator_len, _ = logits.shape #[B, T, N_O + 1]
+        bsz, max_operator_len, _ = logits.shape #[B, T, N_O]
 
         operator_logit_flatten = torch.reshape(logits, (bsz * max_operator_len, -1))  # [B*T, N_O]
         gold_operator_label_flatten = torch.reshape(labels, (-1,))  # [B*T]
@@ -89,7 +93,7 @@ class WrapperModel(pl.LightningModule):
         assert operator_logit_flatten.shape[0] == gold_operator_label_flatten.shape[0]
         assert len(operator_logit_flatten.shape) == 2 and len(gold_operator_label_flatten.shape) == 1
 
-        return nn.CrossEntropyLoss(reduction="none")(operator_logit_flatten, gold_operator_label_flatten)
+        return self.metric(operator_logit_flatten, gold_operator_label_flatten)
 
 
     def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -99,7 +103,7 @@ class WrapperModel(pl.LightningModule):
         gold_operand_label_flatten = torch.reshape(torch.reshape(labels, (bsz, -1)), (-1,))  # [B*T*A]
         assert operand_logit_flatten.shape[0] == gold_operand_label_flatten.shape[0]
         assert len(operand_logit_flatten.shape) == 2 and len(gold_operand_label_flatten.shape) == 1
-        return nn.CrossEntropyLoss(reduction="none")(operand_logit_flatten, gold_operand_label_flatten)
+        return self.metric(operand_logit_flatten, gold_operand_label_flatten)
 
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         gold_operator_label = batch.operator_label - 1 # 0 is reserved for unknown, 1 is padding included in loss
@@ -114,10 +118,10 @@ class WrapperModel(pl.LightningModule):
 
         return loss
 
-    def configure_optimizers(self) -> tuple[list[str], list[str]]:
+    def configure_optimizers(self) -> tuple[list[Optimizer], list["_LRScheduler"]]:
         optims = []
         schedulers = []
-        if self.hparams.optimizeroptimizer == "adam":
+        if self.hparams.optimizer == "adam":
             optim = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         elif self.hparams.optimizer == "adamw":
             optim = torch.optim.AdamW(self.parameters(), lr=self.hparams.lr)
@@ -125,5 +129,10 @@ class WrapperModel(pl.LightningModule):
             optim = torch.optim.SGD(self.parameters(), lr=self.hparams.lr)
         else:
             raise NotImplementedError
+
+        optims.append(optim)
+        schedulers.append(get_cosine_schedule_with_warmup(optim,
+                                        num_warmup_steps=self.hparams.warmup_ratio * self.hparams.num_training_steps,
+                                        num_training_steps=self.hparams.num_training_steps))
 
         return optims, schedulers
