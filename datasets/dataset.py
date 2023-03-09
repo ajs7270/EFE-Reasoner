@@ -229,18 +229,18 @@ class Dataset(data.Dataset):
 
     def _get_available_operand_list(self, constant_list: List[str]) -> List[str]:
         ret = []
-        ret += constant_list
 
         max_numbers_size = self.config["max_numbers_size"]
-        max_operators_size = self.config["max_operators_size"]
+        max_step_size = self.config["max_operators_size"]
 
+        ret += constant_list
         ret += [f"n{i}" for i in range(max_numbers_size)]
-        ret += [f"#{i}" for i in range(max_operators_size - 1)]
+        ret += [f"#{i}" for i in range(max_step_size - 1)]
 
-        assert len(ret) == max_numbers_size + (max_operators_size - 1) + len(constant_list), \
+        assert len(ret) == max_numbers_size + (max_step_size - 1) + len(constant_list), \
             "length of ret: {}, max_numbers_size: {}, max_operators_size: {}, len(constant_list): {}\n" \
             "length of available operand list must be equal to the sum of each component" \
-            .format(len(ret), max_numbers_size, max_operators_size, len(constant_list))
+            .format(len(ret), max_numbers_size, max_step_size, len(constant_list))
 
         return ret
 
