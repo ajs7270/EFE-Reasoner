@@ -106,8 +106,8 @@ def main():
     # ========================================
 
     # set Trainer
-    trainer = Trainer.from_argparse_args(args)
-    trainer.fit(model, datamodule=data_module, logger=logger)
+    trainer = Trainer.from_argparse_args(args, logger=logger)
+    trainer.fit(model, datamodule=data_module)
     # ========================================
 
     #trainer.predict(test_dataset)
