@@ -3,7 +3,17 @@ from torch import nn
 
 
 class AwareDecoder(nn.Module):
-    def __init__(self, input_hidden_dim: int):
+    def __init__(self,
+                 input_hidden_dim: int,
+                 operator_vector: torch.Tensor,
+                 const_vector: torch.Tensor,
+                 operator_num: int,     # OPERATOR : UNK + PAD + OPERATOR
+                 const_num: int,        # OPERAND : CONST
+                 max_number_size: int,  # OPERAND : NUMBER
+                 max_equation: int,     # OPERAND : PREVIOUS_RESULT
+                 max_arity: int,
+                 label_pad_id: int,
+                 concat: bool = True):
         super().__init__()
         self.hidden_dim = input_hidden_dim
 
