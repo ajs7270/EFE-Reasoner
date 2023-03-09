@@ -20,6 +20,8 @@ class WrapperModel(pl.LightningModule):
                  optimizer: str = "adamw",
                  constant_ids: list[torch.Tensor] = None,
                  operator_ids: list[torch.Tensor] = None,
+                 label_pad_id: int = 1,
+                 concat: bool = True,
                  ):
         super(WrapperModel, self).__init__()
 
@@ -40,12 +42,15 @@ class WrapperModel(pl.LightningModule):
                 param.requires_grad = False
 
         # set constant_list_embedding
-        constant_vectors = self._get_vectors(constant_ids, True) # Tensor [N_C, H*2] or [N_C, H]
+        constant_vectors = self._get_vectors(constant_ids, concat=concat) # Tensor [N_C, H*2] or [N_C, H]
         # set operator_list_embedding
-        operator_vectors = self._get_vectors(operator_ids, True) # Tensor [N_O, H*2] or [N_O, H]
+        operator_vectors = self._get_vectors(operator_ids, concat=concat) # Tensor [N_O, H*2] or [N_O, H]
 
         # set decoder
-        self.decoder = AwareDecoder(input_hidden_dim=self.config.hidden_size)
+        self.decoder = AwareDecoder(input_hidden_dim=self.config.hidden_size,
+                                    constant_vectors=constant_vectors,
+                                    operator_vectors=operator_vectors,
+                                    concat=concat)
 
     def _get_vectors(self, ids_list: list[torch.Tensor], concat: bool) -> torch.Tensor:
         # return the sum or concatenation of first and last hidden_state of constant_ids

@@ -274,3 +274,9 @@ class Dataset(data.Dataset):
                 batch[i].operand_label[0]
 
         return Feature(input_ids, attention_mask, question_mask, number_mask, operator_label, operand_label)
+
+    @property
+    def pad_id(self):
+        assert self.operand_encoder.encode("PAD").item() == self.operator_encoder.encode("PAD").item()
+
+        return self.operand_encoder.encode("PAD").item()
