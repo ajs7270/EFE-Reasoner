@@ -80,7 +80,7 @@ class WrapperModel(pl.LightningModule):
 
     def forward(self, x: Feature):
         encoder_output = self.encoder(x.input_ids).last_hidden_state
-        operator_logit, operand_logit = self.decoder(encoder_output)
+        operator_logit, operand_logit = self.decoder(encoder_output, x.attention_mask, x.question_mask, x.number_mask)
 
         return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
 
