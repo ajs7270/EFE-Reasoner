@@ -44,8 +44,8 @@ class Problem:
 
 class Dataset(data.Dataset):
     def __init__(self,
-                 data_path: str = "data/processed/mathqa/train.json",
-                 config_path: str = "data/processed/mathqa/config.json",
+                 data_path: Path = Path("data/processed/mathqa/train.json"),
+                 config_path: Path = Path("data/processed/mathqa/config.json"),
                  pretrained_model_name: str = "roberta-base",
                  ):
         with open(Path(BASE_PATH, data_path), 'r') as f:

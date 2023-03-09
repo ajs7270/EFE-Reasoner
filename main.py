@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader
 
 from pytorch_lightning import Trainer
 from lightning_fabric import seed_everything
+
+from datasets.DataModule import DataModule
 from datasets.dataset import Dataset
 from argparse import ArgumentParser
 from model.sunny.wrapper_model import WrapperModel
@@ -18,17 +20,10 @@ parser = ArgumentParser("Train for MathQA or SVAMP")
 # Experiment argument
 parser.add_argument("--experiment_name", type=str, default="mathqa", choices=["mathqa", "svamp"], help="data name")
 
-# dataloader argument
-parser.add_argument("--train_data_path", type=str, default="data/processed/mathqa/train.json",
+# data module argument
+parser.add_argument("--data_path", type=str, default="data/processed/mathqa",
                     help="path to the train data")
-parser.add_argument("--dev_data_path", type=str, default="data/processed/mathqa/dev.json",
-                    help="path to the dev data")
-parser.add_argument("--test_data_path", type=str, default="data/processed/mathqa/test.json",
-                    help="path to the test data")
-parser.add_argument("--configure_path", type=str, default="data/processed/mathqa/config.json",
-                    help="path to the configure file")
-parser.add_argument("--train_batch_size", type=int, default=32, help="batch size")
-parser.add_argument("--test_batch_size", type=int, default=32, help="batch size")
+parser.add_argument("--batch_size", type=int, default=32, help="batch size")
 parser.add_argument("--num_workers", type=int, default=1, help="number of workers for dataloader")
 
 # trainer argument
@@ -84,30 +79,12 @@ def main():
     seed_everything(args.seed)
     # torch.use_deterministic_algorithms(args.deterministic)
 
-    # set dataset
+    # set data module
     # ========================================
-    train_dataset = Dataset(args.train_data_path, args.configure_path, args.bert_model)
-    dev_dataset = Dataset(args.dev_data_path, args.configure_path, args.bert_model)
-    #test_dataset = Dataset(args.test_data_path, args.configure_path, args.bert_model)
-    # ========================================
-
-    # set dataloader
-    # ========================================
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=args.train_batch_size,
-                                  shuffle=True,
-                                  num_workers=args.num_workers,
-                                  collate_fn=train_dataset.collate_function)
-    dev_dataloader = DataLoader(dev_dataset,
-                                batch_size=args.test_batch_size,
-                                shuffle=False,
-                                num_workers=args.num_workers,
-                                collate_fn=dev_dataset.collate_function)
-    # test_dataloader = DataLoader(test_dataset,
-    #                              batch_size=args.test_batch_size,
-    #                              shuffle=False,
-    #                              num_workers=args.num_workers,
-    #                              collate_fn=test_dataset.collate_function)
+    data_module = DataModule(data_path=args.data_path,
+                             batch_size=args.batch_size,
+                             num_workers=args.num_workers,
+                             bert_model=args.bert_model)
     # ========================================
 
     # set model
@@ -119,18 +96,18 @@ def main():
         args.weight_decay,
         args.warmup_ratio,
         args.optimizer,
-        train_dataset.constant_ids,
-        train_dataset.operator_ids,
-        num_training_steps=len(train_dataloader) * args.max_epochs,
-        label_pad_id = train_dataset.pad_id,
+        data_module.train_dataset.constant_ids,
+        data_module.train_dataset.operator_ids,
+        num_training_steps=len(data_module.train_dataloader()) * args.max_epochs,
+        label_pad_id = data_module.train_dataset.pad_id,
         concat=True,
-        dataset_config = train_dataset.config
+        dataset_config = data_module.train_dataset.config
     )
     # ========================================
 
     # set Trainer
     trainer = Trainer.from_argparse_args(args)
-    trainer.fit(model, train_dataloaders=train_dataloader, val_dataloaders=dev_dataloader)
+    trainer.fit(model, datamodule=data_module, logger=logger)
     # ========================================
 
     #trainer.predict(test_dataset)
