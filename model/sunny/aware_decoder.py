@@ -24,24 +24,33 @@ class AwareDecoder(nn.Module):
 
                 self.number_vector = self._get_num_vec(input, number_mask)  # [N_Q, H] N_Q : number of quantity (maybe use torch.gather?)
 
-    def _get_num_vec(self, input: torch.Tensor, number_mask: torch.Tensor, concat: bool) -> torch.Tensor:
+
+    def _get_num_vec(self, input: torch.Tensor, number_mask: torch.Tensor, max_number: int, concat: bool) -> torch.Tensor:
         # input : [B, S, H]
         # number_mask : [B, S]
-        # number_vector : [N_Q, H] or [N_Q, H*2] regarding concat
+        # number_vector : [B, N_Q, H] or [B, N_Q, H*2] regarding concat
         # returns number vector for each quantity
-        n = int(torch.max(number_mask).item())
+        batch_size = input.size(0)
+
         if concat:
-            number_vector = torch.zeros(n, self.hidden_dim*2)
+            number_vector = torch.zeros(batch_size, max_number, self.hidden_dim * 2)
         else:
-            number_vector = torch.zeros(n, self.hidden_dim)
-        for i in range(n):
-            index = torch.nonzero(number_mask == i)
-            first = input[index[0, 0], index[0, 1], :]   # [H]
-            last = input[index[-1, 0], index[-1, 1], :]  # [H]
-            assert first.shape == last.shape == (self.hidden_dim,)
-            if concat:
-                number_vector[i, :] = torch.cat((first, last), dim=0)  # [H*2]
-            else:
-                number_vector[i, :] = first + last
+            number_vector = torch.zeros(batch_size, max_number, self.hidden_dim)
+
+        for i in range(batch_size):
+            for j in range(max_number):
+                index = torch.nonzero(number_mask[i] == j+1)
+
+                # 발견된 위치가 없는 경우
+                if index.size(0) == 0:
+                    continue
+
+                first = input[i, index[0, 0], :]  # [H]
+                last = input[i, index[-1, 0], :]  # [H]
+                # assert first.shape == last.shape == (self.hidden_dim,)
+                if concat:
+                    number_vector[i, j, :] = torch.cat([first, last], dim=0)  # [H*2]
+                else:
+                    number_vector[i, j, :] = torch.mean(first, last)  # [H]
 
         return number_vector
