@@ -15,7 +15,7 @@ class AwareDecoderTest(TestCase):
     concat = True
 
     const_vectors = torch.rand(constant_num, input_hidden_dim * 2)
-    op_vectors = torch.rand(operator_num, input_hidden_dim)
+    op_vectors = torch.rand(operator_num, input_hidden_dim * 2)
 
     model = AwareDecoder(input_hidden_dim=input_hidden_dim,
                          operator_num=operator_num,
