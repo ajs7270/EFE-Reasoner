@@ -128,7 +128,8 @@ def main():
         train_dataset.constant_ids,
         train_dataset.operator_ids,
         label_pad_id = train_dataset.pad_id,
-        concat=True
+        concat=True,
+        dataset_config = train_dataset.config
     )
     # ========================================
 
