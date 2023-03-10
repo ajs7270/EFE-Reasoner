@@ -1,6 +1,7 @@
 from typing import Any, Union
 
 import torch
+import torchmetrics
 from torch import nn
 
 import pytorch_lightning as pl
@@ -34,7 +35,13 @@ class WrapperModel(pl.LightningModule):
         self.save_hyperparameters()
 
         # set metric
-        self.metric = nn.CrossEntropyLoss()
+        self.operator_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                       num_classes=len(operator_ids))
+        self.operand_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                      num_classes=len(constant_ids)
+                                                                  + self.hparams.datatset_config["max_numbers_size"]
+                                                                  + self.hparams.datatset_config["max_operators_size"])
+        self.loss = nn.CrossEntropyLoss()
 
         # set encoder
         self.encoder = AutoModel.from_pretrained(self.hparams["bert_model"])
@@ -93,17 +100,20 @@ class WrapperModel(pl.LightningModule):
         assert operator_logit_flatten.shape[0] == gold_operator_label_flatten.shape[0]
         assert len(operator_logit_flatten.shape) == 2 and len(gold_operator_label_flatten.shape) == 1
 
-        return self.metric(operator_logit_flatten, gold_operator_label_flatten)
+        return self.loss(operator_logit_flatten, gold_operator_label_flatten)
 
 
     def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         bsz, max_operator_len, max_arity, _ = logits.shape  # [B, T, A, N_D]
+
         operand_logit_flatten = torch.reshape(torch.reshape(logits, (bsz, max_operator_len * max_arity, -1)),
                                               (bsz * max_operator_len * max_arity, -1))  # [B*T*A, N_D]
         gold_operand_label_flatten = torch.reshape(torch.reshape(labels, (bsz, -1)), (-1,))  # [B*T*A]
+
         assert operand_logit_flatten.shape[0] == gold_operand_label_flatten.shape[0]
         assert len(operand_logit_flatten.shape) == 2 and len(gold_operand_label_flatten.shape) == 1
-        return self.metric(operand_logit_flatten, gold_operand_label_flatten)
+
+        return self.loss(operand_logit_flatten, gold_operand_label_flatten)
 
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         gold_operator_label = batch.operator_label - 1 # 0 is reserved for unknown, 1 is padding included in loss
@@ -113,6 +123,11 @@ class WrapperModel(pl.LightningModule):
 
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+
+        self.log("operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
+        self.log("operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        self.log("operator_loss", operator_loss, on_step=True)
+        self.log("operand_loss", operand_loss, on_step=True)
 
         loss = operator_loss + operand_loss
 
