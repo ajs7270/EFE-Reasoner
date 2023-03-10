@@ -2,7 +2,7 @@ from pytorch_lightning.profilers import SimpleProfiler
 
 import os
 from pytorch_lightning.loggers import WandbLogger
-
+from pytorch_lightning.callbacks import DeviceStatsMonitor
 from pytorch_lightning import Trainer
 from lightning_fabric import seed_everything
 
@@ -112,8 +112,8 @@ def main():
     # ========================================
 
     # set Trainer
-    trainer = Trainer.from_argparse_args(args, logger=logger)
-    trainer.tune(model, datamodule=data_module)
+    trainer = Trainer.from_argparse_args(args, logger=logger, callbacks=[DeviceStatsMonitor()])
+    #trainer.tune(model, datamodule=data_module)
     trainer.fit(model, datamodule=data_module)
     # ========================================
 
