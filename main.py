@@ -35,10 +35,10 @@ parser.add_argument("--num_nodes", type=int, default=1, help="number of GPU node
 parser.add_argument("--precision", default="bf16",
                     choices=['64', '32', '16', 'bf16', 64, 32, 16],
                     help="precision")
-parser.add_argument("--profiler", default="simple", choices=[None, "simple", "advanced"],
+parser.add_argument("--profiler", default="advanced", choices=[None, "simple", "advanced"],
                     help="profiler")
 parser.add_argument("--enable_progress_bar", type=bool, default=True, help="enable progress bar")
-parser.add_argument("--strategy", type=str, default=None, choices=["ddp", "fsdp"],
+parser.add_argument("--strategy", type=str, default="ddp", choices=["ddp", "fsdp"],
                     help="strategy for distributed training(ddp: Data-parallel fsdp: model-parallel)")
 parser.add_argument("--auto_lr_find", type=bool, default=True, help="Runs a learning rate finder algorithm")
 parser.add_argument("--auto_scale_batch_size", type=bool, default=True, help="Automatically tries to find the largest batch size that fits into memory, before any training")
