@@ -1,15 +1,12 @@
-from typing import Union, Optional
 from pytorch_lightning.profilers import SimpleProfiler
 
 import os
 from pytorch_lightning.loggers import WandbLogger
-from torch.utils.data import DataLoader
 
 from pytorch_lightning import Trainer
 from lightning_fabric import seed_everything
 
 from datasets.DataModule import DataModule
-from datasets.dataset import Dataset
 from argparse import ArgumentParser
 from model.sunny.wrapper_model import WrapperModel
 
@@ -17,6 +14,9 @@ parser = ArgumentParser("Train for MathQA or SVAMP")
 
 # Experiment argument
 parser.add_argument("--experiment_name", type=str, default="mathqa", choices=["mathqa", "svamp"], help="data name")
+
+# wandb argument
+parser.add_argument("--log_path", type=str, default="log", help="result save directory")
 
 # data module argument
 parser.add_argument("--data_path", type=str, default="data/processed/mathqa",
@@ -26,7 +26,7 @@ parser.add_argument("--num_workers", type=int, default=8, help="number of worker
 
 # trainer argument
 parser.add_argument("--base_root_dir", type=str, default="result", help="saves checkpoints to 'some/path/' at every epoch end")
-parser.add_argument("--devices", type=int, default=, help="number of gpus used by accelerator")
+parser.add_argument("--devices", type=int, default=-1, help="number of gpus used by accelerator")
 parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                     help="choice computing device")
 parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
@@ -43,9 +43,8 @@ parser.add_argument("--strategy", type=str, default=None, choices=["ddp", "fsdp"
 parser.add_argument("--auto_lr_find", type=bool, default=True, help="Runs a learning rate finder algorithm")
 parser.add_argument("--auto_scale_batch_size", type=bool, default=True, help="Automatically tries to find the largest batch size that fits into memory, before any training")
 parser.add_argument("--log_every_n_steps", type=int, default=500, help="log every n steps")
+parser.add_argument("--early_stop_callback", type=bool, default=True, help="early stop callback")
 
-# parser.add_argument("--model_save_dir", type=str, default="model_save", help="model save directory")
-# parser.add_argument("--result_path", type=str, default="result", help="result save directory")
 
 # reproduction argument
 parser.add_argument("--seed", type=int, default=42, help="random seed")
@@ -54,8 +53,9 @@ parser.add_argument("--deterministic", type=bool, default=False,
 
 # model argument
 parser.add_argument("--fine_tune", type=int, default=0, help="fine tune the PLM model")
-parser.add_argument("--bert_model", type=str, default="roberta-base",
-                    choices=["roberta-large", "roberta-base", "t5-small", "t5-large"],
+parser.add_argument("--bert_model", type=str, default="facebook/npm",
+                    choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
+                            "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
                     help="pretrained model name in huggingface")
 parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
