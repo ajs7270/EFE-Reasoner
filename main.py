@@ -73,7 +73,8 @@ def main():
     # ========================================
     logger = None
     if args.wandb:
-        logger = WandbLogger(project="sunny", name=args.experiment_name, save_dir=args.result_path)
+        logger = WandbLogger(name=f"{args.experiment_name}_{args.bert_model}_{args.optimizer}_{args.batch_size}",
+                             project="sunny", save_dir=args.log_path)
     # ========================================
 
     # set parallelism tokenizer
