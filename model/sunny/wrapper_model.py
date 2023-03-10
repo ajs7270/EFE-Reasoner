@@ -39,8 +39,8 @@ class WrapperModel(pl.LightningModule):
                                                        num_classes=len(operator_ids))
         self.operand_accuracy = torchmetrics.Accuracy(task="multiclass",
                                                       num_classes=len(constant_ids)
-                                                                  + self.hparams.datatset_config["max_numbers_size"]
-                                                                  + self.hparams.datatset_config["max_operators_size"])
+                                                                  + dataset_config["max_numbers_size"]
+                                                                  + dataset_config["max_operators_size"])
         self.loss = nn.CrossEntropyLoss()
 
         # set encoder
