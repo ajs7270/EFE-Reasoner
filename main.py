@@ -1,9 +1,7 @@
 from typing import Union, Optional
 from pytorch_lightning.profilers import SimpleProfiler
 
-import numpy as np
-import random
-import torch
+import os
 from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
@@ -24,15 +22,16 @@ parser.add_argument("--experiment_name", type=str, default="mathqa", choices=["m
 parser.add_argument("--data_path", type=str, default="data/processed/mathqa",
                     help="path to the train data")
 parser.add_argument("--batch_size", type=int, default=32, help="batch size")
-parser.add_argument("--num_workers", type=int, default=1, help="number of workers for dataloader")
+parser.add_argument("--num_workers", type=int, default=8, help="number of workers for dataloader")
 
 # trainer argument
-parser.add_argument("--devices", type=int, default=1, help="number of workers for dataloader")
+parser.add_argument("--base_root_dir", type=str, default="result", help="saves checkpoints to 'some/path/' at every epoch end")
+parser.add_argument("--devices", type=int, default=, help="number of gpus used by accelerator")
 parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                     help="choice computing device")
 parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
 parser.add_argument("--max_epochs", type=int, default=150, help="max epoch")
-parser.add_argument("--num_nodes", type=int, default=1, help="Number of GPU nodes for distributed training")
+parser.add_argument("--num_nodes", type=int, default=1, help="number of GPU nodes(computers) for distributed training")
 parser.add_argument("--precision", default="bf16",
                     choices=['64', '32', '16', 'bf16', 64, 32, 16],
                     help="precision")
@@ -41,6 +40,9 @@ parser.add_argument("--profiler", default="simple", choices=[None, "simple", "ad
 parser.add_argument("--enable_progress_bar", type=bool, default=True, help="enable progress bar")
 parser.add_argument("--strategy", type=str, default=None, choices=["ddp", "fsdp"],
                     help="strategy for distributed training(ddp: Data-parallel fsdp: model-parallel)")
+parser.add_argument("--auto_lr_find", type=bool, default=True, help="Runs a learning rate finder algorithm")
+parser.add_argument("--auto_scale_batch_size", type=bool, default=True, help="Automatically tries to find the largest batch size that fits into memory, before any training")
+parser.add_argument("--log_every_n_steps", type=int, default=500, help="log every n steps")
 
 # parser.add_argument("--model_save_dir", type=str, default="model_save", help="model save directory")
 # parser.add_argument("--result_path", type=str, default="result", help="result save directory")
@@ -73,6 +75,9 @@ def main():
     if args.wandb:
         logger = WandbLogger(project="sunny", name=args.experiment_name, save_dir=args.result_path)
     # ========================================
+
+    # set parallelism tokenizer
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # set seed
     # ========================================
