@@ -57,7 +57,7 @@ parser.add_argument("--bert_model", type=str, default="facebook/npm",
                     choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
                             "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
                     help="pretrained model name in huggingface")
-parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
+parser.add_argument("--lr", type=float, default=1.9054607179632464e-05, help="learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
 parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
 parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
