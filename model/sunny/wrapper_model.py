@@ -124,14 +124,53 @@ class WrapperModel(pl.LightningModule):
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
 
-        self.log("operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
-        self.log("operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
-        self.log("operator_loss", operator_loss, on_step=True)
-        self.log("operand_loss", operand_loss, on_step=True)
+        self.log("train_operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
+        self.log("train_operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        self.log("train_operator_loss", operator_loss, on_step=True)
+        self.log("train_operand_loss", operand_loss, on_step=True)
 
         loss = operator_loss + operand_loss
 
         return loss
+
+    def validation_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
+        gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+        gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+
+        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
+
+        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
+        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+
+        self.log("val_operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
+        self.log("val_operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        self.log("val_operator_loss", operator_loss, on_step=True)
+        self.log("val_operand_loss", operand_loss, on_step=True)
+
+        loss = operator_loss + operand_loss
+
+        return loss
+
+    def test_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
+        gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+        gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+
+        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
+
+        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
+        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+
+        self.log("test_operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
+        self.log("test_operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        self.log("test_operator_loss", operator_loss, on_step=True)
+        self.log("test_operand_loss", operand_loss, on_step=True)
+
+        loss = operator_loss + operand_loss
+
+        return loss
+
+    # def predict_step(self, batch: Feature, batch_idx: int, dataloader_idx: int = 0) -> Any:
+    #     return self.model(batch)
 
     def configure_optimizers(self) -> tuple[list[Optimizer], list["_LRScheduler"]]:
         optims = []
