@@ -113,6 +113,7 @@ def main():
 
     # set Trainer
     trainer = Trainer.from_argparse_args(args, logger=logger)
+    trainer.tune(model, datamodule=data_module)
     trainer.fit(model, datamodule=data_module)
     # ========================================
 
