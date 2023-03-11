@@ -73,6 +73,10 @@ def main():
     # ========================================
     logger = None
     if args.wandb:
+        # if not exist log_path, make directory
+        if not os.path.exists(args.log_path):
+            os.makedirs(args.log_path)
+
         logger = WandbLogger(name=f"{args.experiment_name}_{args.bert_model}_{args.optimizer}_{args.batch_size}",
                              project="sunny", save_dir=args.log_path)
     # ========================================
