@@ -21,7 +21,7 @@ parser.add_argument("--log_path", type=str, default="log", help="result save dir
 # data module argument
 parser.add_argument("--data_path", type=str, default="data/processed/mathqa",
                     help="path to the train data")
-parser.add_argument("--batch_size", type=int, default=32, help="batch size")
+parser.add_argument("--batch_size", type=int, default=8, help="batch size")
 parser.add_argument("--num_workers", type=int, default=8, help="number of workers for dataloader")
 
 # trainer argument
@@ -38,7 +38,7 @@ parser.add_argument("--precision", default="bf16",
 parser.add_argument("--profiler", default="simple", choices=[None, "simple", "advanced"],
                     help="profiler")
 parser.add_argument("--enable_progress_bar", type=bool, default=True, help="enable progress bar")
-parser.add_argument("--strategy", type=str, default="dp", choices=["dp", "ddp", "fsdp"],
+parser.add_argument("--strategy", type=str, default="ddp", choices=["ddp", "fsdp"],
                     help="strategy for distributed training(ddp: Data-parallel fsdp: model-parallel)")
 parser.add_argument("--auto_lr_find", type=bool, default=True, help="Runs a learning rate finder algorithm")
 parser.add_argument("--auto_scale_batch_size", type=bool, default=True, help="Automatically tries to find the largest batch size that fits into memory, before any training")
@@ -63,7 +63,7 @@ parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup rati
 parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
 
 # logging with wandb
-parser.add_argument("--wandb", type=int, default=0, help="use wandb")
+parser.add_argument("--wandb", type=int, default=1, help="use wandb")
 parser.add_argument("--auth_path", type=str, default="auth_key.json", help="path to the auth.json for wandb")
 
 def main():
@@ -113,7 +113,7 @@ def main():
 
     # set Trainer
     trainer = Trainer.from_argparse_args(args, logger=logger, callbacks=[DeviceStatsMonitor()])
-    trainer.tune(model, datamodule=data_module)
+    #trainer.tune(model, datamodule=data_module)
     trainer.fit(model, datamodule=data_module)
     # ========================================
 
