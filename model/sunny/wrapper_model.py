@@ -124,8 +124,20 @@ class WrapperModel(pl.LightningModule):
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
 
-        self.log("train_operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
-        self.log("train_operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        # calculate accuracy
+        self.operator_accuracy.to(self.device)
+        self.operand_accuracy.to(self.device)
+
+        batch_size = operator_logit.shape[0]
+        for i in range(batch_size):
+            self.operator_accuracy(operator_logit[i,:,:], gold_operator_label[i,:])
+
+            num_operand = operand_logit.shape[2]
+            for j in range(num_operand):
+                self.operand_accuracy(operand_logit[i,:,j,:], gold_operand_label[i,:,j])
+
+        self.log("train_operator_accuracy", self.operator_accuracy, on_epoch=True)
+        self.log("train_operand_accuracy", self.operand_accuracy, on_epoch=True)
         self.log("train_operator_loss", operator_loss, on_step=True)
         self.log("train_operand_loss", operand_loss, on_step=True)
 
@@ -142,8 +154,20 @@ class WrapperModel(pl.LightningModule):
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
 
-        self.log("val_operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
-        self.log("val_operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        # calculate accuracy
+        self.operator_accuracy.to(self.device)
+        self.operand_accuracy.to(self.device)
+
+        batch_size = operator_logit.shape[0]
+        for i in range(batch_size):
+            self.operator_accuracy(operator_logit[i, :, :], gold_operator_label[i, :])
+
+            num_operand = operand_logit.shape[2]
+            for j in range(num_operand):
+                self.operand_accuracy(operand_logit[i, :, j, :], gold_operand_label[i, :, j])
+
+        self.log("train_operator_accuracy", self.operator_accuracy, on_epoch=True)
+        self.log("train_operand_accuracy", self.operand_accuracy, on_epoch=True)
         self.log("val_operator_loss", operator_loss, on_step=True)
         self.log("val_operand_loss", operand_loss, on_step=True)
 
@@ -160,8 +184,20 @@ class WrapperModel(pl.LightningModule):
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
 
-        self.log("test_operator_accuracy", self.operator_accuracy(operator_logit, gold_operator_label), on_step=True)
-        self.log("test_operand_accuracy", self.operand_accuracy(operand_logit, gold_operand_label), on_step=True)
+        # calculate accuracy
+        self.operator_accuracy.to(self.device)
+        self.operand_accuracy.to(self.device)
+
+        batch_size = operator_logit.shape[0]
+        for i in range(batch_size):
+            self.operator_accuracy(operator_logit[i, :, :], gold_operator_label[i, :])
+
+            num_operand = operand_logit.shape[2]
+            for j in range(num_operand):
+                self.operand_accuracy(operand_logit[i, :, j, :], gold_operand_label[i, :, j])
+
+        self.log("train_operator_accuracy", self.operator_accuracy, on_epoch=True)
+        self.log("train_operand_accuracy", self.operand_accuracy, on_epoch=True)
         self.log("test_operator_loss", operator_loss, on_step=True)
         self.log("test_operand_loss", operand_loss, on_step=True)
 
