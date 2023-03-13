@@ -13,8 +13,8 @@ from model.sunny.wrapper_model import WrapperModel
 parser = ArgumentParser("Train for MathQA or SVAMP")
 
 # Experiment argument
-parser.add_argument("--wandb", type=int, default=0, help="use wandb")
-parser.add_argument("--experiment_name", type=str, default="mathqa", choices=["mathqa", "svamp"], help="data name")
+parser.add_argument("--wandb", type=int, default=1, help="use wandb")
+parser.add_argument("--experiment_name", type=str, default="svamp", choices=["mathqa", "svamp"], help="data name")
 
 # wandb argument
 parser.add_argument("--log_path", type=str, default="log", help="result save directory")
@@ -58,7 +58,7 @@ parser.add_argument("--bert_model", type=str, default="facebook/npm",
                     choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
                             "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
                     help="pretrained model name in huggingface")
-parser.add_argument("--lr", type=float, default=1.9054607179632464e-05, help="learning rate")
+parser.add_argument("--lr", type=float, default=2e-05, help="learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
 parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
 parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
@@ -75,8 +75,8 @@ def main():
         if not os.path.exists(args.log_path):
             os.makedirs(args.log_path)
 
-        logger = WandbLogger(name=f"{args.experiment_name}_{args.bert_model}_{args.optimizer}_{args.batch_size}",
-                             project="sunny", save_dir=args.log_path)
+        logger = WandbLogger(name=f"{args.bert_model}_{args.optimizer}_{args.batch_size}",
+                             project=f"sunny_{args.experiment_name}", save_dir=args.log_path)
     # ========================================
 
     # set parallelism tokenizer
