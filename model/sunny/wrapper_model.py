@@ -88,38 +88,76 @@ class WrapperModel(pl.LightningModule):
 
         return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
 
-    def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        bsz, max_operator_len, _ = logits.shape #[B, T, N_O]
+    def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor,
+                                 op_fin: list[int]) -> torch.Tensor:
+        bsz, _, _ = logits.shape #[B, T, N_O]
 
-        operator_logit_flatten = torch.reshape(logits, (bsz * max_operator_len, -1))  # [B*T, N_O]
-        gold_operator_label_flatten = torch.reshape(labels, (-1,))  # [B*T]
+        loss = None
+        for i in range(bsz):
+            if loss is None:
+                loss = self.loss(torch.reshape(logits[i, :op_fin[i], :], (op_fin[i], -1)),
+                                 torch.reshape(labels[i, :op_fin[i]], (-1,)))
+            else:
+                loss += self.loss(torch.reshape(logits[i, :op_fin[i], :], (op_fin[i], -1)),
+                                  torch.reshape(labels[i, :op_fin[i]], (-1,)))
 
-        assert operator_logit_flatten.shape[0] == gold_operator_label_flatten.shape[0]
-        assert len(operator_logit_flatten.shape) == 2 and len(gold_operator_label_flatten.shape) == 1
-
-        return self.loss(operator_logit_flatten, gold_operator_label_flatten)
+        return loss
 
 
-    def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor,
+                                op_fin: list[int], oe_fin: list[list[int]]) -> torch.Tensor:
         bsz, max_operator_len, max_arity, _ = logits.shape  # [B, T, A, N_D]
 
-        operand_logit_flatten = torch.reshape(torch.reshape(logits, (bsz, max_operator_len * max_arity, -1)),
-                                              (bsz * max_operator_len * max_arity, -1))  # [B*T*A, N_D]
-        gold_operand_label_flatten = torch.reshape(torch.reshape(labels, (bsz, -1)), (-1,))  # [B*T*A]
+        loss = None
+        for i in range(bsz):
+                for j in range(op_fin[i]):
+                    if loss is None:
+                        loss = self.loss(torch.reshape(logits[i, :op_fin[i], :oe_fin[i][j], :], (op_fin[i]*oe_fin[i][j], -1)),
+                                 torch.reshape(labels[i, :op_fin[i], :oe_fin[i][j]], (-1,)))
+                    else:
+                        loss += self.loss(torch.reshape(logits[i, :op_fin[i], :oe_fin[i][j], :], (op_fin[i]*oe_fin[i][j], -1)),
+                                 torch.reshape(labels[i, :op_fin[i], :oe_fin[i][j]], (-1,)))
+        return loss
 
-        assert operand_logit_flatten.shape[0] == gold_operand_label_flatten.shape[0]
-        assert len(operand_logit_flatten.shape) == 2 and len(gold_operand_label_flatten.shape) == 1
+    def _get_operator_finish_indexes(self, operator_label: torch.Tensor) -> list[int]:
+        op_fin = []
+        none_index = 0
+        for i in range(operator_label.shape[0]):
+            none_index_list = torch.where(operator_label[i] == none_index)[0]
+            if len(none_index_list) == 0:
+                op_fin.append(operator_label.shape[1])
+            else:
+                op_fin.append(none_index_list[0] + 1)
 
-        return self.loss(operand_logit_flatten, gold_operand_label_flatten)
+        return op_fin
+
+    def _get_operand_finish_indexes(self, operand_label: torch.Tensor, op_fin: list[int]) -> list[list[int]]:
+        oe_fin = []
+        none_index = 0
+        for i, fin in enumerate(op_fin):
+            oe_fin.append([])
+            for j in range(fin):
+                none_index_list = torch.where(operand_label[i,j,:] == none_index)[0]
+                if len(none_index_list) == 0:
+                    oe_fin[i].append(operand_label.shape[2])
+                else:
+                    oe_fin[i].append(none_index_list[0] + 1)
+
+        return oe_fin
 
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        gold_operator_label = batch.operator_label - 1 # 0 is reserved for unknown, 1 is padding included in loss
-        gold_operand_label = batch.operand_label - 1 # 0 is reserved for unknown, 1 is padding included in loss
+        gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+        gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
 
-        operator_logit, operand_logit = self(batch)    #[B, T, N_O + 1], [B, T, A, N_D + 1]
+        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
-        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
-        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+        # operator finish_indexes
+        op_fin = self._get_operator_finish_indexes(gold_operator_label)
+        # operand finish_indexes
+        oe_fin = self._get_operand_finish_indexes(gold_operand_label, op_fin)
+
+        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label, op_fin)
+        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label, op_fin, oe_fin)
 
         # calculate accuracy
         self.operator_accuracy.to(self.device)
@@ -127,11 +165,11 @@ class WrapperModel(pl.LightningModule):
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
-            self.operator_accuracy(operator_logit[i,:,:], gold_operator_label[i,:])
+            self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
 
             num_operand = operand_logit.shape[2]
             for j in range(num_operand):
-                self.operand_accuracy(operand_logit[i,:,j,:], gold_operand_label[i,:,j])
+                self.operand_accuracy(operand_logit[i, :op_fin[i], j, :], gold_operand_label[i, :op_fin[i], j])
 
         self.log("train_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True)
         self.log("train_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True)
@@ -148,8 +186,13 @@ class WrapperModel(pl.LightningModule):
 
         operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
-        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
-        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+        #operator finish_indexes
+        op_fin = self._get_operator_finish_indexes(gold_operator_label)
+        # operand finish_indexes
+        oe_fin = self._get_operand_finish_indexes(gold_operand_label, op_fin)
+
+        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label, op_fin)
+        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label, op_fin, oe_fin)
 
         # calculate accuracy
         self.operator_accuracy.to(self.device)
@@ -157,11 +200,11 @@ class WrapperModel(pl.LightningModule):
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
-            self.operator_accuracy(operator_logit[i, :, :], gold_operator_label[i, :])
+            self.operator_accuracy(operator_logit[i,:op_fin[i],:], gold_operator_label[i,:op_fin[i]])
 
             num_operand = operand_logit.shape[2]
             for j in range(num_operand):
-                self.operand_accuracy(operand_logit[i, :, j, :], gold_operand_label[i, :, j])
+                self.operand_accuracy(operand_logit[i,:op_fin[i],j,:], gold_operand_label[i,:op_fin[i],j])
 
         self.log("val_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -178,8 +221,13 @@ class WrapperModel(pl.LightningModule):
 
         operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
-        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label)
-        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label)
+        # operator finish_indexes
+        op_fin = self._get_operator_finish_indexes(gold_operator_label)
+        # operand finish_indexes
+        oe_fin = self._get_operand_finish_indexes(gold_operand_label, op_fin)
+
+        operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label, op_fin)
+        operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label, op_fin, oe_fin)
 
         # calculate accuracy
         self.operator_accuracy.to(self.device)
@@ -187,11 +235,11 @@ class WrapperModel(pl.LightningModule):
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
-            self.operator_accuracy(operator_logit[i, :, :], gold_operator_label[i, :])
+            self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
 
             num_operand = operand_logit.shape[2]
             for j in range(num_operand):
-                self.operand_accuracy(operand_logit[i, :, j, :], gold_operand_label[i, :, j])
+                self.operand_accuracy(operand_logit[i, :op_fin[i], j, :], gold_operand_label[i, :op_fin[i], j])
 
         self.log("test_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
