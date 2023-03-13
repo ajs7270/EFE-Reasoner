@@ -93,6 +93,7 @@ class WrapperModel(pl.LightningModule):
         bsz, _, _ = logits.shape #[B, T, N_O]
 
         loss = None
+        loss_count = 0
         for i in range(bsz):
             if loss is None:
                 loss = self.loss(torch.reshape(logits[i, :op_fin[i], :], (op_fin[i], -1)),
@@ -100,8 +101,9 @@ class WrapperModel(pl.LightningModule):
             else:
                 loss += self.loss(torch.reshape(logits[i, :op_fin[i], :], (op_fin[i], -1)),
                                   torch.reshape(labels[i, :op_fin[i]], (-1,)))
+            loss_count += 1
 
-        return loss
+        return loss / loss_count
 
 
     def _calculate_operand_loss(self, logits: torch.Tensor, labels: torch.Tensor,
@@ -109,15 +111,18 @@ class WrapperModel(pl.LightningModule):
         bsz, max_operator_len, max_arity, _ = logits.shape  # [B, T, A, N_D]
 
         loss = None
+        loss_count = 0
         for i in range(bsz):
-                for j in range(op_fin[i]):
-                    if loss is None:
-                        loss = self.loss(torch.reshape(logits[i, :op_fin[i], :oe_fin[i][j], :], (op_fin[i]*oe_fin[i][j], -1)),
-                                 torch.reshape(labels[i, :op_fin[i], :oe_fin[i][j]], (-1,)))
-                    else:
-                        loss += self.loss(torch.reshape(logits[i, :op_fin[i], :oe_fin[i][j], :], (op_fin[i]*oe_fin[i][j], -1)),
-                                 torch.reshape(labels[i, :op_fin[i], :oe_fin[i][j]], (-1,)))
-        return loss
+            for j in range(op_fin[i]):
+                if loss is None:
+                    loss = self.loss(torch.reshape(logits[i, :op_fin[i], :oe_fin[i][j], :], (op_fin[i]*oe_fin[i][j], -1)),
+                             torch.reshape(labels[i, :op_fin[i], :oe_fin[i][j]], (-1,)))
+                else:
+                    loss += self.loss(torch.reshape(logits[i, :op_fin[i], :oe_fin[i][j], :], (op_fin[i]*oe_fin[i][j], -1)),
+                             torch.reshape(labels[i, :op_fin[i], :oe_fin[i][j]], (-1,)))
+                loss_count += 1
+
+        return loss / loss_count
 
     def _get_operator_finish_indexes(self, operator_label: torch.Tensor) -> list[int]:
         op_fin = []
