@@ -9,6 +9,7 @@ from transformers import AutoModel, AutoConfig, get_cosine_schedule_with_warmup
 
 from datasets.dataset import Feature
 from model.sunny.aware_decoder import AwareDecoder
+from utils import equationAccuracy
 
 
 class WrapperModel(pl.LightningModule):
@@ -33,6 +34,7 @@ class WrapperModel(pl.LightningModule):
         self.save_hyperparameters()
 
         # set metric
+        self.accuracy = equationAccuracy()
         self.operator_accuracy = torchmetrics.Accuracy(task="multiclass",
                                                        num_classes=len(operator_ids))
         self.operand_accuracy = torchmetrics.Accuracy(task="multiclass",
@@ -132,7 +134,7 @@ class WrapperModel(pl.LightningModule):
             if len(none_index_list) == 0:
                 op_fin.append(operator_label.shape[1])
             else:
-                op_fin.append(none_index_list[0] + 1)
+                op_fin.append(none_index_list[0])
 
         return op_fin
 
@@ -146,7 +148,7 @@ class WrapperModel(pl.LightningModule):
                 if len(none_index_list) == 0:
                     oe_fin[i].append(operand_label.shape[2])
                 else:
-                    oe_fin[i].append(none_index_list[0] + 1)
+                    oe_fin[i].append(none_index_list[0])
 
         return oe_fin
 
@@ -170,12 +172,23 @@ class WrapperModel(pl.LightningModule):
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
+            preds = torch.Tensor().to(self.device)  # to calculate accuracy
+            golds = torch.Tensor().to(self.device)
+
+            preds = torch.concat((preds, torch.argmax(operator_logit[i, :op_fin[i], :], dim=1)))
+            golds = torch.concat((golds, gold_operator_label[i, :op_fin[i]]))
+
             self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
 
-            num_operand = operand_logit.shape[2]
+            num_operand = op_fin[i]
             for j in range(num_operand):
-                self.operand_accuracy(operand_logit[i, :op_fin[i], j, :], gold_operand_label[i, :op_fin[i], j])
+                preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j],:], dim=1)))
+                golds = torch.concat((golds, gold_operand_label[i,j,:oe_fin[i][j]]))
 
+                self.operand_accuracy(operand_logit[i, j, :oe_fin[i][j],:], gold_operand_label[i,j,:oe_fin[i][j]])
+            self.accuracy(preds, golds)
+
+        self.log("train_accuracy", self.accuracy, on_step=True, on_epoch=True)
         self.log("train_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True)
         self.log("train_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True)
         self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True)
@@ -205,12 +218,22 @@ class WrapperModel(pl.LightningModule):
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
-            self.operator_accuracy(operator_logit[i,:op_fin[i],:], gold_operator_label[i,:op_fin[i]])
+            preds = torch.Tensor().to(self.device) # to calculate accuracy
+            golds = torch.Tensor().to(self.device)
 
-            num_operand = operand_logit.shape[2]
+            preds = torch.concat((preds, torch.argmax(operator_logit[i,:op_fin[i],:], dim=1)))
+            golds = torch.concat((golds, gold_operator_label[i,:op_fin[i]]))
+
+            self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
+            num_operand = op_fin[i]
             for j in range(num_operand):
-                self.operand_accuracy(operand_logit[i,:op_fin[i],j,:], gold_operand_label[i,:op_fin[i],j])
+                preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
 
+                self.operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
+            self.accuracy(preds, golds)
+
+        self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True)
@@ -240,12 +263,22 @@ class WrapperModel(pl.LightningModule):
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
+            preds = torch.Tensor().to(self.device)  # to calculate accuracy
+            golds = torch.Tensor().to(self.device)
+
+            preds = torch.concat((preds, torch.argmax(operator_logit[i, :op_fin[i], :], dim=1)))
+            golds = torch.concat((golds, gold_operator_label[i, :op_fin[i]]))
+
             self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
-
-            num_operand = operand_logit.shape[2]
+            num_operand = op_fin[i]
             for j in range(num_operand):
-                self.operand_accuracy(operand_logit[i, :op_fin[i], j, :], gold_operand_label[i, :op_fin[i], j])
+                preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
 
+                self.operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
+            self.accuracy(preds, golds)
+
+        self.log("test_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True)
