@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
@@ -10,6 +11,8 @@ class DataModule(LightningDataModule):
         self.train_data_path = Path(data_path, "train.json")
         self.dev_data_path = Path(data_path, "dev.json")
         self.test_data_path = Path(data_path, "test.json")
+        if not os.path.exists(self.test_data_path):
+            self.test_data_path = self.dev_data_path
         self.configure_path = Path(data_path, "config.json")
         self.bert_model = bert_model
         self.batch_size = batch_size

@@ -20,7 +20,7 @@ parser.add_argument("--experiment_name", type=str, default="mathqa", choices=["m
 parser.add_argument("--log_path", type=str, default="log", help="result save directory")
 
 # data module argument
-parser.add_argument("--data_path", type=str, default="data/processed/mathqa",
+parser.add_argument("--data_path", type=str, default="data/processed/svamp",
                     help="path to the train data")
 parser.add_argument("--batch_size", type=int, default=8, help="batch size")
 parser.add_argument("--num_workers", type=int, default=8, help="number of workers for dataloader")
