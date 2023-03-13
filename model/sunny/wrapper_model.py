@@ -134,7 +134,10 @@ class WrapperModel(pl.LightningModule):
             if len(none_index_list) == 0:
                 op_fin.append(operator_label.shape[1])
             else:
-                op_fin.append(none_index_list[0])
+                if none_index_list[0] == 0:
+                    op_fin.append(1)
+                else:
+                    op_fin.append(none_index_list[0])
 
         return op_fin
 
