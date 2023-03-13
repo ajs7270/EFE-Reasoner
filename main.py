@@ -13,6 +13,7 @@ from model.sunny.wrapper_model import WrapperModel
 parser = ArgumentParser("Train for MathQA or SVAMP")
 
 # Experiment argument
+parser.add_argument("--wandb", type=int, default=0, help="use wandb")
 parser.add_argument("--experiment_name", type=str, default="mathqa", choices=["mathqa", "svamp"], help="data name")
 
 # wandb argument
@@ -62,9 +63,6 @@ parser.add_argument("--weight_decay", type=float, default=0.0, help="weight deca
 parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
 parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
 
-# logging with wandb
-parser.add_argument("--wandb", type=int, default=1, help="use wandb")
-parser.add_argument("--auth_path", type=str, default="auth_key.json", help="path to the auth.json for wandb")
 
 def main():
     args = parser.parse_args()
