@@ -47,7 +47,13 @@ class AwareDecoder(nn.Module):
         )
 
         # operator classifier
-        self.operator_classifier = nn.Linear(self.hidden_dim, self.operator_num)
+        self.operator_classifier = nn.Sequential(
+          nn.Linear(self.hidden_dim, self.hidden_dim//2),
+          nn.ReLU(),
+          nn.Linear(self.hidden_dim//2, self.hidden_dim//4),
+          nn.ReLU(),
+          nn.Linear(self.hidden_dim//4, self.operator_num)
+        )
 
         # operand classifier : operand는 여러개가 뽑혀야 하므로 일반적인 classifier를 사용해서는 안됨 => gru같은 neural network을 사용해야 함
         self.operand_gru = nn.GRU(input_size=self.hidden_dim,
