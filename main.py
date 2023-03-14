@@ -43,7 +43,7 @@ parser.add_argument("--strategy", type=str, default="ddp", choices=["ddp", "fsdp
                     help="strategy for distributed training(ddp: Data-parallel fsdp: model-parallel)")
 parser.add_argument("--auto_lr_find", type=bool, default=True, help="Runs a learning rate finder algorithm")
 parser.add_argument("--auto_scale_batch_size", type=bool, default=True, help="Automatically tries to find the largest batch size that fits into memory, before any training")
-parser.add_argument("--log_every_n_steps", type=int, default=500, help="log every n steps")
+parser.add_argument("--log_every_n_steps", type=int, default=10, help="log every n steps")
 parser.add_argument("--early_stop_callback", type=bool, default=True, help="early stop callback")
 
 
