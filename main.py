@@ -31,7 +31,7 @@ parser.add_argument("--devices", type=int, default=-1, help="number of gpus used
 parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                     help="choice computing device")
 parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
-parser.add_argument("--max_epochs", type=int, default=150, help="max epoch")
+parser.add_argument("--max_epochs", type=int, default=500, help="max epoch")
 parser.add_argument("--num_nodes", type=int, default=1, help="number of GPU nodes(computers) for distributed training")
 parser.add_argument("--precision", default="bf16",
                     choices=['64', '32', '16', 'bf16', 64, 32, 16],
@@ -58,7 +58,7 @@ parser.add_argument("--bert_model", type=str, default="facebook/npm",
                     choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
                             "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
                     help="pretrained model name in huggingface")
-parser.add_argument("--lr", type=float, default=2e-05, help="learning rate")
+parser.add_argument("--lr", type=float, default=3e-05, help="learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
 parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
 parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
@@ -75,7 +75,7 @@ def main():
         if not os.path.exists(args.log_path):
             os.makedirs(args.log_path)
 
-        logger = WandbLogger(name=f"{args.bert_model}_{args.optimizer}_{args.batch_size}",
+        logger = WandbLogger(name=f"{args.bert_model}_{args.optimizer}_{args.batch_size}_{args.lr}",
                              project=f"sunny_{args.experiment_name}", save_dir=args.log_path)
     # ========================================
 
