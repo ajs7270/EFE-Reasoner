@@ -37,6 +37,8 @@ class WrapperModel(pl.LightningModule):
         self.accuracy = equationAccuracy()
         self.operator_accuracy = torchmetrics.Accuracy(task="multiclass",
                                                        num_classes=len(operator_ids))
+        self.generated_operator_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                       num_classes=len(operator_ids))
         self.operand_accuracy = torchmetrics.Accuracy(task="multiclass",
                                                       num_classes=len(constant_ids)
                                                                   + dataset_config["max_numbers_size"]
@@ -86,9 +88,9 @@ class WrapperModel(pl.LightningModule):
 
     def forward(self, x: Feature):
         encoder_output = self.encoder(x.input_ids).last_hidden_state
-        operator_logit, operand_logit = self.decoder(encoder_output, x.attention_mask, x.question_mask, x.number_mask)
+        operator_logit, operand_logit, generated_operator_logit = self.decoder(encoder_output, x.attention_mask, x.question_mask, x.number_mask)
 
-        return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
+        return operator_logit, operand_logit, generated_operator_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
 
     def _calculate_operator_loss(self, logits: torch.Tensor, labels: torch.Tensor,
                                  op_fin: list[int]) -> torch.Tensor:
@@ -162,7 +164,7 @@ class WrapperModel(pl.LightningModule):
         gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
         gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
 
-        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
+        operator_logit, operand_logit, generated_operator_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
         # operator finish_indexes
         op_fin = self._get_operator_finish_indexes(gold_operator_label)
@@ -170,6 +172,7 @@ class WrapperModel(pl.LightningModule):
         oe_fin = self._get_operand_finish_indexes(gold_operand_label, op_fin)
 
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label, op_fin)
+        generated_operator_loss = self._calculate_operator_loss(generated_operator_logit, gold_operator_label, op_fin)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label, op_fin, oe_fin)
 
         # calculate accuracy
@@ -186,6 +189,7 @@ class WrapperModel(pl.LightningModule):
             golds = torch.concat((golds, gold_operator_label[i, :op_fin[i]]))
 
             self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
+            self.generated_operator_accuracy(generated_operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
 
             num_operand = op_fin[i]
             for j in range(num_operand):
@@ -195,44 +199,47 @@ class WrapperModel(pl.LightningModule):
                 self.operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
             self.accuracy(preds, golds)
 
-            return operator_loss, operand_loss
+            return operator_loss, operand_loss, generated_operator_loss
 
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        operator_loss, operand_loss = self._calculate_loss_and_accuracy(batch)
+        operator_loss, operand_loss, generated_operator_loss  = self._calculate_loss_and_accuracy(batch)
 
         self.log("train_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_generated_operator_accuracy", self.generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
-        loss = operator_loss + operand_loss
+        loss = operator_loss + operand_loss + generated_operator_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        operator_loss, operand_loss = self._calculate_loss_and_accuracy(batch)
+        operator_loss, operand_loss, generated_operator_loss = self._calculate_loss_and_accuracy(batch)
 
         self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("val_generated_operator_accuracy", self.generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
-        loss = operator_loss + operand_loss
+        loss = operator_loss + operand_loss + generated_operator_loss
         self.log("val_loss", loss, on_step=True, on_epoch=True)
         return loss
 
     def test_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        operator_loss, operand_loss, generated_opertor_loss = self._calculate_loss_and_accuracy(batch)
+        operator_loss, operand_loss, generated_operator_loss  = self._calculate_loss_and_accuracy(batch)
 
         self.log("test_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test_generated_operator_accuracy", self.generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
-        loss = operator_loss + operand_loss
+        loss = operator_loss + operand_loss + generated_operator_loss
         self.log("test_loss", loss, on_step=True, on_epoch=True)
         return loss
 

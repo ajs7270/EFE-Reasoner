@@ -47,12 +47,20 @@ class AwareDecoder(nn.Module):
         )
 
         # operator classifier
-        self.operator_classifier = nn.Sequential(
+        self.context2operator_classifier = nn.Sequential(
           nn.Linear(self.hidden_dim, self.hidden_dim//2),
           nn.ReLU(),
           nn.Linear(self.hidden_dim//2, self.hidden_dim//4),
           nn.ReLU(),
           nn.Linear(self.hidden_dim//4, self.operator_num)
+        )
+
+        self.hidden2operator_classifier = nn.Sequential(
+            nn.Linear(self.hidden_dim, self.hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim // 2, self.hidden_dim // 4),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim // 4, self.operator_num)
         )
 
         # operand classifier : operand는 여러개가 뽑혀야 하므로 일반적인 classifier를 사용해서는 안됨 => gru같은 neural network을 사용해야 함
@@ -94,7 +102,7 @@ class AwareDecoder(nn.Module):
                 attention_mask: torch.Tensor,  # [B, S] : Language model attention mask
                 question_mask: torch.Tensor,  # [B, S] : Language model question mask
                 number_mask: torch.Tensor,  # [B, S] : Language model number mask
-                ) -> tuple[torch.Tensor, torch.Tensor]:  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand logit
+                ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand logit
         # : Operator, Operand prediction, + 1 is padding
         # operand candidate vector setup : const vector(dataset 만들때 생성해서, 이 모델의 init 단계에서 설정), number vector, previous result vector
         # self.number_vector = torch.zeros(input.size(0), self.max_number_size,
@@ -105,6 +113,7 @@ class AwareDecoder(nn.Module):
 
         # Initialize return values
         operators_logit = torch.zeros(input.size(0), self.max_equation, self.operator_num).to(device)
+        generated_operators_logit = torch.zeros(input.size(0), self.max_equation, self.operator_num).to(device)
         operands_logit = torch.zeros(input.size(0), self.max_equation, self.max_arity,
                                      self.const_num + self.max_number_size + self.max_equation).to(device)  # PAD(None) + CONST + NUM + PREVIOUS RESULT
         operators_prediction_vectors = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)
@@ -128,7 +137,7 @@ class AwareDecoder(nn.Module):
 
             # 1. Operator prediction
             # get operator vector
-            operators_logit[:, i, :] = self.operator_classifier(context_vector)  # [B, N_O]
+            operators_logit[:, i, :] = self.context2operator_classifier(context_vector)  # [B, N_O]
             operator_index = torch.argmax(operators_logit[:, i, :], dim=1)  # [B]
             operators_prediction_vectors[:, i, :] = self.operator_projection(torch.index_select(self.operator_vector, dim=0,
                                                                        index=operator_index))  # [B, H]
@@ -156,8 +165,11 @@ class AwareDecoder(nn.Module):
                         if operand_idx[batch_idx] == self.label_pad_id:
                             # 3. Update operand vector (#0, #1, #2등 이전 연산의 결과)
                             # 이전 연산결과를 저장해야 하는데, 처음 none이 등장했을 때만 저장
+                            # 처음 None이 등장 했을때
                             if max(self.previous_result_vector[batch_idx, i, :]).item() == 0:
                                 self.previous_result_vector[batch_idx, i, :] = x[batch_idx, 0, :]
+                                # 마지막 생성된 vector로 이번 step의 operator를 generation
+                                generated_operators_logit[batch_idx, i, :] = self.hidden2operator_classifier(x[batch_idx, 0, :])  # [H
 
                         operands_prediction_vectors[batch_idx, i, j, :] = self.operand_projection(self.const_vector[operand_idx[batch_idx],:])  # [H]
 
@@ -181,7 +193,7 @@ class AwareDecoder(nn.Module):
             x = context_vector.unsqueeze(dim=0)
             hx = self.previous_result_vector[:, i, :]
 
-        return operators_logit, operands_logit
+        return operators_logit, operands_logit, generated_operators_logit
 
 
     def _get_num_vec(self, input: torch.Tensor, number_mask: torch.Tensor, max_number: int, concat: bool) -> torch.Tensor:
