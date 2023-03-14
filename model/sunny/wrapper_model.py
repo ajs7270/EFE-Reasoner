@@ -194,11 +194,11 @@ class WrapperModel(pl.LightningModule):
                 self.operand_accuracy(operand_logit[i, j, :oe_fin[i][j],:], gold_operand_label[i,j,:oe_fin[i][j]])
             self.accuracy(preds, golds)
 
-        self.log("train_accuracy", self.accuracy, on_step=True, on_epoch=True)
-        self.log("train_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True)
-        self.log("train_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True)
-        self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True)
-        self.log("train_operand_loss", operand_loss, on_step=True, on_epoch=True)
+        self.log("train_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
         loss = operator_loss + operand_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True)
@@ -242,8 +242,8 @@ class WrapperModel(pl.LightningModule):
         self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True)
-        self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True)
+        self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
         loss = operator_loss + operand_loss
         self.log("val_loss", loss, on_step=True, on_epoch=True)
@@ -287,8 +287,8 @@ class WrapperModel(pl.LightningModule):
         self.log("test_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True)
-        self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True)
+        self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
         loss = operator_loss + operand_loss
         self.log("test_loss", loss, on_step=True, on_epoch=True)
