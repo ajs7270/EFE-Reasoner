@@ -130,7 +130,8 @@ class AwareDecoder(nn.Module):
             # get operator vector
             operators_logit[:, i, :] = self.operator_classifier(context_vector)  # [B, N_O]
             operator_index = torch.argmax(operators_logit[:, i, :], dim=1)  # [B]
-            operators_prediction_vectors[:, i, :] = self.operator_projection(self.operator_vector(operator_index))  # [B, H]
+            operators_prediction_vectors[:, i, :] = self.operator_projection(torch.index_select(self.operator_vector, dim=0,
+                                                                       index=operator_index))  # [B, H]
 
             # 2. Operand prediction
             for j in range(self.max_arity):
@@ -158,7 +159,7 @@ class AwareDecoder(nn.Module):
                             if max(self.previous_result_vector[batch_idx, i, :]).item() == 0:
                                 self.previous_result_vector[batch_idx, i, :] = x[batch_idx, 0, :]
 
-                        operands_prediction_vectors[batch_idx, i, j, :] = self.operand_projection(self.const_vector(operand_idx[batch_idx]))  # [H]
+                        operands_prediction_vectors[batch_idx, i, j, :] = self.operand_projection(self.const_vector[operand_idx[batch_idx],:])  # [H]
 
                     # fetch number vector
                     operand_idx[batch_idx] -= self.const_num
