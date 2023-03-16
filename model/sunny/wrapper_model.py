@@ -174,7 +174,6 @@ class WrapperModel(pl.LightningModule):
 
         # calculate accuracy
         self.operator_accuracy.to(self.device)
-        self.generated_operator_accuracy.to(self.device)
         self.operand_accuracy.to(self.device)
 
         batch_size = operator_logit.shape[0]
