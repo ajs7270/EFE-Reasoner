@@ -77,7 +77,7 @@ class Dataset(data.Dataset):
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-2]
                 # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
             # exclude 1 beggining(<s>) and 2 end(Ġ, <\s>).
-        elif self.pretrained_model_name in ["microsoft/deberta-v3-large"]:
+        elif self.pretrained_model_name in ["microsoft/deberta-v3-large", "microsoft/deberta-v3-base"]:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-1]
         else:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-2]
