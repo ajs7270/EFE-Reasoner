@@ -68,15 +68,13 @@ class AwareDecoder(nn.Module):
                                   hidden_size=self.hidden_dim,
                                   num_layers=1,  # Layer를 쌓으면 학습이 잘 되지 않으므로 Multi Layer GRU는 사용하지 않는다.
                                   bidirectional=False,  # 우리는 과거와 현재를 굳이 확인할 필요가 없으므로
-                                  batch_first=True,
-                                  dropout=0.1)
+                                  batch_first=True)
 
         # 어떤 정보를 계산해야 하는지를 남겨준다 (hidden state에 계산한 결과를 계속 넣어줘서, 그 정보는 없애도록 학습되길 기대한다)
         self.context_gru = nn.GRU(input_size=self.hidden_dim,
                                   hidden_size=self.hidden_dim,
                                   num_layers=1,
-                                  batch_first=True,
-                                  dropout=0.1)
+                                  batch_first=True)
 
         self.operand_classifier = nn.Linear(self.hidden_dim,
                                             self.const_num + self.max_number_size + self.max_equation)  # PAD(None) + CONST + NUM + PREVIOUS RESULT
@@ -134,6 +132,9 @@ class AwareDecoder(nn.Module):
                 # context_vector, _ = self.context_attention(input, input, input, attn_mask=attention_mask) # [B, S, H]
                 # context_vector = context_vector[:, 0, :] # [B, H]
                 # context_vector = context_vector.unsqueeze(1) # [B, 1, H]
+            else:
+                context_vector, _ = self.context_gru(context_vector, hx=context_vector_hx)
+                context_vector = context_vector.squeeze(1)  # [B, H]
 
             # 1. Operator prediction
             # get operator vector
@@ -190,8 +191,8 @@ class AwareDecoder(nn.Module):
                     self.previous_result_vector[batch_idx, i, :] = operands_prediction_vectors[batch_idx, i, -1, :]
 
             # 4. Update context vector
-            x = context_vector.unsqueeze(dim=0)
-            hx = self.previous_result_vector[:, i, :]
+            context_vector = context_vector.unsqueeze(dim=1)
+            context_vector_hx = self.previous_result_vector[:, i, :].unsqueeze(dim=0)
 
         return operators_logit, operands_logit, generated_operators_logit
 
