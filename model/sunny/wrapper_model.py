@@ -2,7 +2,7 @@ import torch
 import torchmetrics
 from torch import nn
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from torch.optim import Optimizer
 # from torch.optim.lr_scheduler import _LRScheduler
 from transformers import AutoModel, AutoConfig, get_cosine_schedule_with_warmup

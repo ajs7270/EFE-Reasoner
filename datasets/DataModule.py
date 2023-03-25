@@ -1,11 +1,11 @@
 import os
 from pathlib import Path
-from pytorch_lightning import LightningDataModule
+import lightning.pytorch as pl
 from torch.utils.data import DataLoader
 from datasets.dataset import Dataset
 
 
-class DataModule(LightningDataModule):
+class DataModule(pl.LightningDataModule):
     def __init__(self, data_path: str, batch_size: int, num_workers: int, bert_model: str):
         super().__init__()
         self.train_data_path = Path(data_path, "train.json")
