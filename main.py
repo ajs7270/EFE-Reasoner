@@ -14,7 +14,7 @@ from model.sunny.wrapper_model import WrapperModel
 def get_project_args():
     parser = ArgumentParser("Project(Sunny) argument")
     # Experiment argument
-    parser.add_argument("--wandb", type=int, default=0, help="use wandb")
+    parser.add_argument("--wandb", type=int, default=1, help="use wandb")
     parser.add_argument("--experiment_name", type=str, default="svamp", choices=["mathqa", "svamp"], help="data name")
 
     # wandb argument
@@ -36,16 +36,16 @@ def get_data_args():
 
 def get_model_args():
     parser = ArgumentParser("Model argument")
-    parser.add_argument("--fine_tune", type=int, default=1, help="fine tune the PLM model")
     parser.add_argument("--bert_model", type=str, default="roberta-large",
                         choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single",
                                  "witiko/mathberta",
                                  "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
                         help="pretrained model name in huggingface")
     parser.add_argument("--lr", type=float, default=1.9e-05, help="learning rate")
+    parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
+    parser.add_argument("--fine_tune", type=int, default=1, help="fine tune the PLM model")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
     parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
-    parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
     return parser.parse_args()
 
 def get_trainer_args():
@@ -56,13 +56,13 @@ def get_trainer_args():
     parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
     parser.add_argument("--max_epochs", type=int, default=1000, help="max epoch")
     parser.add_argument("--num_nodes", type=int, default=1, help="number of GPU nodes(computers) for distributed training")
-    parser.add_argument("--precision", default="bf16",
+    parser.add_argument("--precision", default="16",
                         choices=['64', '32', '16', 'bf16', 64, 32, 16],
                         help="precision")
     parser.add_argument("--profiler", default="simple", choices=[None, "simple", "advanced"],
                         help="profiler")
     parser.add_argument("--enable_progress_bar", type=bool, default=True, help="enable progress bar")
-    parser.add_argument("--strategy", type=str, default="auto", choices=["auto", "ddp", "fsdp"],
+    parser.add_argument("--strategy", type=str, default="ddp_find_unused_parameters_true", choices=["auto", "ddp", "fsdp"],
                         help="strategy for distributed training(ddp: Data-parallel fsdp: model-parallel)")
     parser.add_argument("--log_every_n_steps", type=int, default=10, help="log every n steps")
     parser.add_argument("--deterministic", type=bool, default=False,
@@ -85,6 +85,7 @@ def main():
         logger = WandbLogger(
             name=f"{model_args.bert_model}_{model_args.optimizer}_{data_args.batch_size}_{model_args.lr}",
             project=f"sunny_{project_args.experiment_name}",
+            config=vars(model_args),
             save_dir=project_args.log_path)
     # ========================================
 
@@ -129,16 +130,14 @@ def main():
     device_stats_callback = DeviceStatsMonitor()
     checkpoint_callback = ModelCheckpoint(
         save_top_k=10,
-        monitor="global_step",
-        mode="max",
+        monitor="val_loss",
         dirpath=f"{project_args.results_dir}/checkpoints/",
         filename=f"{project_args.experiment_name}-{model_args.bert_model}-{model_args.optimizer}-"
                  f"{data_args.batch_size}-{model_args.lr}-"
                  "{epoch:02d}-{global_step}",
     )
     early_stop_callback = EarlyStopping(
-        monitor="global_step",
-        mode="max",
+        monitor="val_loss",
         patience=10
     )
 

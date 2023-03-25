@@ -173,11 +173,9 @@ class WrapperModel(pl.LightningModule):
 
         return oe_fin
 
-    def _calculate_loss_and_accuracy(self, batch):
+    def _calculate_loss(self, batch, operator_logit, operand_logit):
         gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
         gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
-
-        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
         # operator finish_indexes
         op_fin = self._get_operator_finish_indexes(gold_operator_label)
@@ -187,9 +185,17 @@ class WrapperModel(pl.LightningModule):
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label, op_fin)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label, op_fin, oe_fin)
 
-        # calculate accuracy
-        self.operator_accuracy.to(self.device)
-        self.operand_accuracy.to(self.device)
+        return operator_loss, operand_loss
+
+    def _calculate_accuracy(self, batch, operator_logit, operand_logit, type: str ="train"):
+
+        gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+        gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
+
+        # operator finish_indexes
+        op_fin = self._get_operator_finish_indexes(gold_operator_label)
+        # operand finish_indexes
+        oe_fin = self._get_operand_finish_indexes(gold_operand_label, op_fin)
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
@@ -199,34 +205,61 @@ class WrapperModel(pl.LightningModule):
             preds = torch.concat((preds, torch.argmax(operator_logit[i, :op_fin[i], :], dim=1)))
             golds = torch.concat((golds, gold_operator_label[i, :op_fin[i]]))
 
-            self.operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
+            if type == "train":
+                self.train_operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
 
-            num_operand = op_fin[i]
-            for j in range(num_operand):
-                preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
-                golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
+                num_operand = op_fin[i]
+                for j in range(num_operand):
+                    preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                    golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
 
-                self.operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
-            self.accuracy(preds, golds)
+                    self.train_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
+                self.train_accuracy(preds, golds)
+            elif type == "validation":
+                self.validation_operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
 
-            return operator_loss, operand_loss
+                num_operand = op_fin[i]
+                for j in range(num_operand):
+                    preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                    golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
 
+                    self.validation_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :],
+                                                gold_operand_label[i, j, :oe_fin[i][j]])
+                self.validation_accuracy(preds, golds)
+            elif type == "test":
+                self.test_operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
+
+                num_operand = op_fin[i]
+                for j in range(num_operand):
+                    preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                    golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
+
+                    self.test_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :],
+                                                     gold_operand_label[i, j, :oe_fin[i][j]])
+                self.test_accuracy(preds, golds)
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        operator_loss, operand_loss = self._calculate_loss_and_accuracy(batch)
+        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
+        operator_loss, operand_loss = self._calculate_loss(batch, operator_logit, operand_logit)
+
+        self._calculate_accuracy(batch, operator_logit, operand_logit, "train")
         self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operator_accuracy", self.train_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operand_accuracy", self.train_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+
         self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
         loss = operator_loss + operand_loss
-        self.log("train_loss", loss, on_step=True, on_epoch=True)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        operator_loss, operand_loss = self._calculate_loss_and_accuracy(batch)
+        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
+        operator_loss, operand_loss = self._calculate_loss(batch, operator_logit, operand_logit)
+
+        self._calculate_accuracy(batch, operator_logit, operand_logit, "validation")
         self.log("val_accuracy", self.validation_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_accuracy", self.validation_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_accuracy", self.validation_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -234,11 +267,15 @@ class WrapperModel(pl.LightningModule):
         self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
         loss = operator_loss + operand_loss
-        self.log("val_loss", loss, on_step=True, on_epoch=True)
+        self.log("val_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def test_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
-        operator_loss, operand_loss, generated_opertor_loss = self._calculate_loss_and_accuracy(batch)
+        operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
+
+        operator_loss, operand_loss = self._calculate_loss(batch, operator_logit, operand_logit)
+
+        self._calculate_accuracy(batch, operator_logit, operand_logit, "test")
 
         self.log("test_accuracy", self.test_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_accuracy", self.test_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -247,7 +284,7 @@ class WrapperModel(pl.LightningModule):
         self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
         loss = operator_loss + operand_loss
-        self.log("test_loss", loss, on_step=True, on_epoch=True)
+        self.log("test_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     # def predict_step(self, batch: Feature, batch_idx: int, dataloader_idx: int = 0) -> Any:
