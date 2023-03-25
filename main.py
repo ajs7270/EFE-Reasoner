@@ -83,7 +83,7 @@ def main():
             os.makedirs(project_args.log_path)
 
         logger = WandbLogger(
-            name=f"{model_args.bert_model}_{model_args.optimizer}_{data_args.batch_size}_{model_args.lr}",
+            name=f"gen_{model_args.bert_model}_{model_args.optimizer}_{data_args.batch_size}_{model_args.lr}",
             project=f"sunny_{project_args.experiment_name}",
             config=vars(model_args),
             save_dir=project_args.log_path)
