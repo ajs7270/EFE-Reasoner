@@ -173,7 +173,7 @@ class WrapperModel(pl.LightningModule):
 
         return oe_fin
 
-    def _calculate_loss_and_accuracy(self,operator_logit, operand_logit, batch):
+    def _calculate_loss(self,operator_logit, operand_logit, batch):
         gold_operator_label = batch.operator_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
         gold_operand_label = batch.operand_label - 1  # 0 is reserved for unknown, 1 is padding included in loss
 
