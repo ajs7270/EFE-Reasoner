@@ -34,13 +34,28 @@ class WrapperModel(pl.LightningModule):
         self.save_hyperparameters()
 
         # set metric
-        self.accuracy = equationAccuracy()
-        self.operator_accuracy = torchmetrics.Accuracy(task="multiclass",
+        self.train_accuracy = equationAccuracy()
+        self.train_operator_accuracy = torchmetrics.Accuracy(task="multiclass",
                                                        num_classes=len(operator_ids))
-        self.operand_accuracy = torchmetrics.Accuracy(task="multiclass",
+        self.train_operand_accuracy = torchmetrics.Accuracy(task="multiclass",
                                                       num_classes=len(constant_ids)
                                                                   + dataset_config["max_numbers_size"]
                                                                   + dataset_config["max_operators_size"])
+        self.validation_accuracy = equationAccuracy()
+        self.validation_operator_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                             num_classes=len(operator_ids))
+        self.validation_operand_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                            num_classes=len(constant_ids)
+                                                                        + dataset_config["max_numbers_size"]
+                                                                        + dataset_config["max_operators_size"])
+        self.test_accuracy = equationAccuracy()
+        self.test_operator_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                                  num_classes=len(operator_ids))
+        self.test_operand_accuracy = torchmetrics.Accuracy(task="multiclass",
+                                                                 num_classes=len(constant_ids)
+                                                                             + dataset_config["max_numbers_size"]
+                                                                             + dataset_config["max_operators_size"])
+
         self.loss = nn.CrossEntropyLoss()
 
         # set encoder
@@ -199,9 +214,9 @@ class WrapperModel(pl.LightningModule):
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         operator_loss, operand_loss = self._calculate_loss_and_accuracy(batch)
 
-        self.log("train_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("train_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("train_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_operator_accuracy", self.train_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("train_operand_accuracy", self.train_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
@@ -212,9 +227,9 @@ class WrapperModel(pl.LightningModule):
     def validation_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         operator_loss, operand_loss = self._calculate_loss_and_accuracy(batch)
 
-        self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("val_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("val_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("val_accuracy", self.validation_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("val_operator_accuracy", self.validation_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("val_operand_accuracy", self.validation_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
@@ -225,9 +240,9 @@ class WrapperModel(pl.LightningModule):
     def test_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         operator_loss, operand_loss, generated_opertor_loss = self._calculate_loss_and_accuracy(batch)
 
-        self.log("test_accuracy", self.accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("test_operator_accuracy", self.operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("test_operand_accuracy", self.operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test_accuracy", self.test_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test_operator_accuracy", self.test_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test_operand_accuracy", self.test_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
