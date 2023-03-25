@@ -14,7 +14,7 @@ from model.sunny.wrapper_model import WrapperModel
 def get_project_args():
     parser = ArgumentParser("Project(Sunny) argument")
     # Experiment argument
-    parser.add_argument("--wandb", type=int, default=0, help="use wandb")
+    parser.add_argument("--wandb", type=int, default=1, help="use wandb")
     parser.add_argument("--experiment_name", type=str, default="svamp", choices=["mathqa", "svamp"], help="data name")
 
     # wandb argument
@@ -129,16 +129,14 @@ def main():
     device_stats_callback = DeviceStatsMonitor()
     checkpoint_callback = ModelCheckpoint(
         save_top_k=10,
-        monitor="global_step",
-        mode="max",
+        monitor="val_loss",
         dirpath=f"{project_args.results_dir}/checkpoints/",
         filename=f"{project_args.experiment_name}-{model_args.bert_model}-{model_args.optimizer}-"
                  f"{data_args.batch_size}-{model_args.lr}-"
                  "{epoch:02d}-{global_step}",
     )
     early_stop_callback = EarlyStopping(
-        monitor="global_step",
-        mode="max",
+        monitor="val_loss",
         patience=10
     )
 
