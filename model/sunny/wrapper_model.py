@@ -2,7 +2,7 @@ import torch
 import torchmetrics
 from torch import nn
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from torch.optim import Optimizer
 # from torch.optim.lr_scheduler import _LRScheduler
 from transformers import AutoModel, AutoConfig, get_cosine_schedule_with_warmup
@@ -177,7 +177,6 @@ class WrapperModel(pl.LightningModule):
 
         # calculate accuracy
         self.operator_accuracy.to(self.device)
-        self.generated_operator_accuracy.to(self.device)
         self.operand_accuracy.to(self.device)
 
         batch_size = operator_logit.shape[0]
