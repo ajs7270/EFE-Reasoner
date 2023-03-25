@@ -37,12 +37,12 @@ def get_data_args():
 def get_model_args():
     parser = ArgumentParser("Model argument")
     parser.add_argument("--fine_tune", type=int, default=1, help="fine tune the PLM model")
-    parser.add_argument("--bert_model", type=str, default="facebook/npm",
+    parser.add_argument("--bert_model", type=str, default="roberta-large",
                         choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single",
                                  "witiko/mathberta",
                                  "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
                         help="pretrained model name in huggingface")
-    parser.add_argument("--lr", type=float, default=3e-05, help="learning rate")
+    parser.add_argument("--lr", type=float, default=1.9e-05, help="learning rate")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
     parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
     parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
@@ -50,11 +50,11 @@ def get_model_args():
 
 def get_trainer_args():
     parser = ArgumentParser("Trainer argument")
-    parser.add_argument("--devices", type=int, default=1, help="number of gpus used by accelerator")
-    parser.add_argument("--accelerator", type=str, default="cpu", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
+    parser.add_argument("--devices", type=int, default=-1, help="number of gpus used by accelerator")
+    parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                         help="choice computing device")
     parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
-    parser.add_argument("--max_epochs", type=int, default=500, help="max epoch")
+    parser.add_argument("--max_epochs", type=int, default=1000, help="max epoch")
     parser.add_argument("--num_nodes", type=int, default=1, help="number of GPU nodes(computers) for distributed training")
     parser.add_argument("--precision", default="bf16",
                         choices=['64', '32', '16', 'bf16', 64, 32, 16],
