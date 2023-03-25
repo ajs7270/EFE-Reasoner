@@ -238,8 +238,8 @@ class WrapperModel(pl.LightningModule):
         operator_loss, operand_loss, generated_operator_loss = self._calculate_loss_and_accuracy(batch)
 
         self.log("val_accuracy", self.validation_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("val_generated_operator_accuracy", self.validation_generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_accuracy", self.validation_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("val_generated_operator_accuracy", self.validation_generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_accuracy", self.validation_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
@@ -253,8 +253,8 @@ class WrapperModel(pl.LightningModule):
 
         self.log("test_accuracy", self.test_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_accuracy", self.test_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("test_operand_accuracy", self.test_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_generated_operator_accuracy", self.test_generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
+        self.log("test_operand_accuracy", self.test_operand_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
