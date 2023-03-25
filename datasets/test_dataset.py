@@ -3,7 +3,7 @@ from unittest import TestCase
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 import re
-from dataset import Dataset, Problem, Feature
+from datasets.dataset import Dataset, Problem, Feature
 import torch.nn.functional as F
 import torch
 
