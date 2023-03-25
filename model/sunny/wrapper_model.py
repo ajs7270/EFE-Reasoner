@@ -255,7 +255,7 @@ class WrapperModel(pl.LightningModule):
         operator_logit, operand_logit, generated_operator_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
         operator_loss, operand_loss, generated_operator_loss  = self._calculate_loss(batch, operator_logit, operand_logit, generated_operator_logit)
 
-        self._calculate_accuracy(batch, operator_logit, operand_logit, "train")
+        self._calculate_accuracy(batch, operator_logit, operand_logit, generated_operator_logit,  "train")
         self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operator_accuracy", self.train_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_generated_operator_accuracy", self.train_generated_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -275,7 +275,7 @@ class WrapperModel(pl.LightningModule):
                                                                                     operand_logit,
                                                                                     generated_operator_logit)
 
-        self._calculate_accuracy(batch, operator_logit, operand_logit, "validation")
+        self._calculate_accuracy(batch, operator_logit, operand_logit, generated_operator_logit, "validation")
 
         self.log("val_accuracy", self.validation_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operator_accuracy", self.validation_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -295,7 +295,7 @@ class WrapperModel(pl.LightningModule):
                                                                                     operand_logit,
                                                                                     generated_operator_logit)
 
-        self._calculate_accuracy(batch, operator_logit, operand_logit, "test")
+        self._calculate_accuracy(batch, operator_logit, operand_logit, generated_operator_logit, "test")
 
         self.log("test_accuracy", self.test_accuracy, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operator_accuracy", self.test_operator_accuracy, on_step=True, on_epoch=True, sync_dist=True)
