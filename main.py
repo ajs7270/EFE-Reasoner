@@ -13,6 +13,7 @@ from model.sunny.wrapper_model import WrapperModel
 
 def get_project_args():
     parser = ArgumentParser("Project(Sunny) argument")
+
     # Experiment argument
     parser.add_argument("--wandb", type=int, default=1, help="use wandb")
     parser.add_argument("--experiment_name", type=str, default="svamp", choices=["mathqa", "svamp"], help="data name")
@@ -24,18 +25,24 @@ def get_project_args():
 
     # reproduction argument
     parser.add_argument("--seed", type=int, default=42, help="random seed")
+
     return parser.parse_args()
+
 def get_data_args():
     parser = ArgumentParser("Data Module argument")
+
     # data module argument
     parser.add_argument("--data_path", type=str, default="data/processed/svamp",
                         help="path to the train data")
     parser.add_argument("--batch_size", type=int, default=8, help="batch size")
     parser.add_argument("--num_workers", type=int, default=8, help="number of workers for dataloader")
+
     return parser.parse_args()
 
 def get_model_args():
     parser = ArgumentParser("Model argument")
+
+    # model argument
     parser.add_argument("--bert_model", type=str, default="roberta-large",
                         choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single",
                                  "witiko/mathberta",
@@ -46,10 +53,13 @@ def get_model_args():
     parser.add_argument("--fine_tune", type=int, default=1, help="fine tune the PLM model")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
     parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
+
     return parser.parse_args()
 
 def get_trainer_args():
     parser = ArgumentParser("Trainer argument")
+
+    # trainer argument
     parser.add_argument("--devices", type=int, default=-1, help="number of gpus used by accelerator")
     parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                         help="choice computing device")
@@ -67,13 +77,18 @@ def get_trainer_args():
     parser.add_argument("--log_every_n_steps", type=int, default=10, help="log every n steps")
     parser.add_argument("--deterministic", type=bool, default=False,
                         help="This flag sets the torch.backends.cudnn.deterministic flag")
+
     return parser.parse_args()
 
 def main():
+    # set argument
+    # ========================================
     project_args = get_project_args()
     data_args = get_data_args()
     model_args = get_model_args()
     trainer_args = get_trainer_args()
+    # ========================================
+
     # set logging
     # ========================================
     logger = None
@@ -90,12 +105,14 @@ def main():
     # ========================================
 
     # set parallelism tokenizer
+    # ========================================
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    # ========================================
 
     # set seed
     # ========================================
     seed_everything(project_args.seed)
-    # torch.use_deterministic_algorithms(args.deterministic)
+    # ========================================
 
     # set data module
     # ========================================
@@ -123,10 +140,10 @@ def main():
         concat=True,
         dataset_config = data_module.train_dataset.config
     )
-
     # ========================================
 
     # set callbacks
+    # ========================================
     device_stats_callback = DeviceStatsMonitor()
     checkpoint_callback = ModelCheckpoint(
         save_top_k=10,
@@ -140,15 +157,15 @@ def main():
         monitor="val_loss",
         patience=10
     )
-
+    # ========================================
 
     # set Trainer
+    # ========================================
     trainer = Trainer(**vars(trainer_args), logger=logger, callbacks=[device_stats_callback,
                                                                       checkpoint_callback])
     trainer.fit(model, datamodule=data_module)
+    # trainer.predict(test_dataset)
     # ========================================
 
-    #trainer.predict(test_dataset)
 if __name__ == "__main__":
     main()
-    #new_main()
