@@ -1,4 +1,5 @@
 import os
+import torch
 
 from lightning.pytorch.trainer import Trainer
 from lightning.fabric import seed_everything
@@ -140,6 +141,8 @@ def main():
         concat=True,
         dataset_config = data_module.train_dataset.config
     )
+    model.encoder = torch.compile(model.encoder)
+    model.decoder = torch.compile(model.decoder)
     # ========================================
 
     # set callbacks
