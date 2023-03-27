@@ -51,9 +51,9 @@ def get_model_args():
                         help="pretrained model name in huggingface")
     parser.add_argument("--lr", type=float, default=1.9e-05, help="learning rate")
     parser.add_argument("--optimizer", type=str, default="adamw", choices=["adamw", "adam", "sgd"], help="optimizer")
-    parser.add_argument("--fine_tune", type=int, default=1, help="fine tune the PLM model")
+    parser.add_argument("--fine_tune", type=int, default=0, help="fine tune the PLM model")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
-    parser.add_argument("--warmup_ratio", type=float, default=0.1, help="warmup ratio")
+    parser.add_argument("--warmup_ratio", type=float, default=0.0, help="warmup ratio")
 
     return parser.parse_args()
 
