@@ -202,6 +202,8 @@ class WrapperModel(pl.LightningModule):
         op_fin = self._get_operator_finish_indexes(gold_operator_label)
         # operand finish_indexes
         oe_fin = self._get_operand_finish_indexes(gold_operand_label, op_fin)
+        # Operator none index
+        none_index = 0
 
         batch_size = operator_logit.shape[0]
         for i in range(batch_size):
@@ -216,38 +218,45 @@ class WrapperModel(pl.LightningModule):
                 self.train_generated_operator_accuracy(generated_operator_logit[i, :op_fin[i], :],
                                                        gold_operator_label[i, :op_fin[i]])
 
-                num_operand = op_fin[i]
-                for j in range(num_operand):
-                    preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
-                    golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
+                # 만약 마지막 operator none 이라면 이 operator에 해당하는 operand는 정답률을 계산할 때 사용하지 않음
+                if golds[-1] != none_index:
+                    num_operand = op_fin[i]
 
-                    self.train_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
+                    for j in range(num_operand):
+                        preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                        golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
+
+                        self.train_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :], gold_operand_label[i, j, :oe_fin[i][j]])
                 self.train_accuracy(preds, golds)
             elif type == "validation":
                 self.validation_operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
                 self.validation_generated_operator_accuracy(generated_operator_logit[i, :op_fin[i], :],
                                                        gold_operator_label[i, :op_fin[i]])
 
-                num_operand = op_fin[i]
-                for j in range(num_operand):
-                    preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
-                    golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
+                # 만약 마지막 operator none 이라면 이 operator에 해당하는 operand는 정답률을 계산할 때 사용하지 않음
+                if golds[-1] != none_index:
+                    num_operand = op_fin[i]
+                    for j in range(num_operand):
+                        preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                        golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
 
-                    self.validation_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :],
-                                                gold_operand_label[i, j, :oe_fin[i][j]])
+                        self.validation_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :],
+                                                    gold_operand_label[i, j, :oe_fin[i][j]])
                 self.validation_accuracy(preds, golds)
             elif type == "test":
                 self.test_operator_accuracy(operator_logit[i, :op_fin[i], :], gold_operator_label[i, :op_fin[i]])
                 self.test_generated_operator_accuracy(generated_operator_logit[i, :op_fin[i], :],
                                                        gold_operator_label[i, :op_fin[i]])
 
-                num_operand = op_fin[i]
-                for j in range(num_operand):
-                    preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
-                    golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
+                # 만약 마지막 operator none 이라면 이 operator에 해당하는 operand는 정답률을 계산할 때 사용하지 않음
+                if golds[-1] != none_index:
+                    num_operand = op_fin[i]
+                    for j in range(num_operand):
+                        preds = torch.concat((preds, torch.argmax(operand_logit[i, j, :oe_fin[i][j], :], dim=1)))
+                        golds = torch.concat((golds, gold_operand_label[i, j, :oe_fin[i][j]]))
 
-                    self.test_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :],
-                                                     gold_operand_label[i, j, :oe_fin[i][j]])
+                        self.test_operand_accuracy(operand_logit[i, j, :oe_fin[i][j], :],
+                                                         gold_operand_label[i, j, :oe_fin[i][j]])
                 self.test_accuracy(preds, golds)
 
 
