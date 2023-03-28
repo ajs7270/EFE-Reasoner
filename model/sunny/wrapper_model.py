@@ -15,6 +15,7 @@ from utils import equationAccuracy
 class WrapperModel(pl.LightningModule):
     def __init__(self,
                  bert_model: str = "roberta-base",
+                 num_layers: int = 4,
                  fine_tune: int = 0,
                  lr: float = 1e-5,
                  weight_decay: float = 0.0,
@@ -74,6 +75,7 @@ class WrapperModel(pl.LightningModule):
 
         # set decoder
         self.decoder = AwareDecoder(input_hidden_dim=self.config.hidden_size,
+                                    num_layers=self.hparams["num_layers"],
                                     operator_vector=operator_vectors,
                                     const_vector=constant_vectors,
                                     operator_num=len(operator_ids),
