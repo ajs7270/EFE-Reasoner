@@ -193,7 +193,7 @@ class AwareDecoder(nn.Module):
                     else:
                         x = torch.unsqueeze(operands_prediction_vectors[:, i, j - 1, :], dim=1)  # [B, 1(Sequence Length), H]
 
-                    hx = hx  # previous hidden state
+                    hx = hx.contiguous()  # previous hidden state
 
                 x, hx = self.operand_gru(x, hx=hx)  # [B, 1(Sequence Length), H], [1, B, H]
 
