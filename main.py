@@ -151,7 +151,7 @@ def main():
     # ========================================
     device_stats_callback = DeviceStatsMonitor()
     checkpoint_callback = ModelCheckpoint(
-        save_top_k=10,
+        save_top_k=5,
         monitor="val_loss",
         dirpath=f"{project_args.results_dir}/checkpoints/",
         filename=f"{project_args.experiment_name}-{model_args.bert_model}-{model_args.optimizer}-"
@@ -160,7 +160,7 @@ def main():
     )
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
-        patience=10
+        patience=5
     )
     # ========================================
 
