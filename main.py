@@ -54,6 +54,7 @@ def get_model_args():
     parser.add_argument("--fine_tune", type=int, default=0, help="fine tune the PLM model")
     parser.add_argument("--weight_decay", type=float, default=0.0, help="weight decay")
     parser.add_argument("--warmup_ratio", type=float, default=0.0, help="warmup ratio")
+    parser.add_argument("--num_layers", type=int, default=4, help="number of layers for gru(context, operand)")
 
     return parser.parse_args()
 
@@ -129,6 +130,7 @@ def main():
     # ========================================
     model = WrapperModel(
         model_args.bert_model,
+        model_args.num_layers,
         model_args.fine_tune,
         model_args.lr,
         model_args.weight_decay,
