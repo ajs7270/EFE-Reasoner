@@ -52,9 +52,7 @@ class AwareDecoder(nn.Module):
         self.operator_classifier = nn.Sequential(
           nn.Linear(self.hidden_dim, self.hidden_dim//2),
           nn.ReLU(),
-          nn.Linear(self.hidden_dim//2, self.hidden_dim//4),
-          nn.ReLU(),
-          nn.Linear(self.hidden_dim//4, self.operator_num)
+          nn.Linear(self.hidden_dim//2, self.operator_num)
         )
 
         # operand classifier : operand는 여러개가 뽑혀야 하므로 일반적인 classifier를 사용해서는 안됨 => gru같은 neural network을 사용해야 함
@@ -71,8 +69,17 @@ class AwareDecoder(nn.Module):
                                   bidirectional=False,
                                   batch_first=True)
 
-        self.operand_classifier = nn.Linear(self.hidden_dim,
-                                            self.const_num + self.max_number_size + self.max_equation)  # PAD(None) + CONST + NUM + PREVIOUS RESULT
+        self.operand_classifier = nn.Sequential(
+            nn.Linear(
+                self.hidden_dim,
+                (self.const_num + self.max_number_size + self.max_equation) // 2
+            ),
+            nn.ReLU(),
+            nn.Linear(
+                (self.const_num + self.max_number_size + self.max_equation) // 2,
+                self.const_num + self.max_number_size + self.max_equation # PAD(None) + CONST + NUM + PREVIOUS RESULT
+            )
+        )
 
         # context attention
         # self.context_attention = nn.MultiheadAttention(embed_dim=self.hidden_dim, num_heads=4, batch_first=True)
