@@ -160,7 +160,7 @@ class AwareDecoder(nn.Module):
                 # context_vector = context_vector[:, 0, :] # [B, H]
                 # context_vector = context_vector.unsqueeze(1) # [B, 1, H]
             else:
-                context_vector, _ = self.context_gru(context_vector, hx=context_vector_hx)
+                context_vector, _ = self.context_gru(context_vector, hx=context_vector_hx.contiguous())
                 context_vector = context_vector.squeeze(1)  # [B, H]
 
             # 1. Operator prediction
@@ -193,9 +193,9 @@ class AwareDecoder(nn.Module):
                     else:
                         x = torch.unsqueeze(operands_prediction_vectors[:, i, j - 1, :], dim=1)  # [B, 1(Sequence Length), H]
 
-                    hx = hx.contiguous()  # previous hidden state
+                    hx = hx  # previous hidden state
 
-                x, hx = self.operand_gru(x, hx=hx)  # [B, 1(Sequence Length), H], [1, B, H]
+                x, hx = self.operand_gru(x, hx=hx.contiguous())  # [B, 1(Sequence Length), H], [1, B, H]
 
                 # get operand vector
                 operand_logit = self.operand_classifier(x.squeeze(dim=1))  # [B, N_D + 1]
