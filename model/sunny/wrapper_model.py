@@ -108,8 +108,8 @@ class WrapperModel(pl.LightningModule):
             x.attention_mask,
             x.question_mask,
             x.number_mask,
-            x.operator_label,
-            x.operand_label
+            x.operator_label-1, # 0 is reserved for unknown, 1 is padding included in loss
+            x.operand_label-1   # 0 is reserved for unknown, 1 is padding included in loss
         )
 
         return operator_logit, operand_logit  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand prediction
