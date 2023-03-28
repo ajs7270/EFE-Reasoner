@@ -5,6 +5,7 @@ from torch import nn
 class AwareDecoder(nn.Module):
     def __init__(self,
                  input_hidden_dim: int,
+                 num_layers: int,
                  operator_vector: torch.Tensor, # PAD(None) + OPERATOR
                  const_vector: torch.Tensor,    # CONST
                  operator_num: int,     # OPERATOR : PAD(None) + OPERATOR
@@ -17,6 +18,7 @@ class AwareDecoder(nn.Module):
         super().__init__()
         # configuration setting
         self.hidden_dim = input_hidden_dim
+        self.num_layers = num_layers
         self.operator_num = operator_num
         self.label_pad_id = label_pad_id
         self.const_num = const_num
@@ -58,14 +60,15 @@ class AwareDecoder(nn.Module):
         # operand classifier : operand는 여러개가 뽑혀야 하므로 일반적인 classifier를 사용해서는 안됨 => gru같은 neural network을 사용해야 함
         self.operand_gru = nn.GRU(input_size=self.hidden_dim,
                                   hidden_size=self.hidden_dim,
-                                  num_layers=1,  # Layer를 쌓으면 학습이 잘 되지 않으므로 Multi Layer GRU는 사용하지 않는다.
+                                  num_layers=self.num_layers,  # Layer를 쌓으면 학습이 잘 되지 않으므로 Multi Layer GRU는 사용하지 않는다.
                                   bidirectional=False,  # 우리는 과거와 현재를 굳이 확인할 필요가 없으므로
                                   batch_first=True)
 
         # 어떤 정보를 계산해야 하는지를 남겨준다 (hidden state에 계산한 결과를 계속 넣어줘서, 그 정보는 없애도록 학습되길 기대한다)
         self.context_gru = nn.GRU(input_size=self.hidden_dim,
                                   hidden_size=self.hidden_dim,
-                                  num_layers=1,
+                                  num_layers=self.num_layers,
+                                  bidirectional=False,
                                   batch_first=True)
 
         self.operand_classifier = nn.Linear(self.hidden_dim,
@@ -180,7 +183,7 @@ class AwareDecoder(nn.Module):
 
             # 4. Update context vector
             context_vector = context_vector.unsqueeze(dim=1)
-            context_vector_hx = self.previous_result_vector[:, i, :].unsqueeze(dim=0)
+            context_vector_hx = self.previous_result_vector[:, i, :].unsqueeze(dim=0).expand(self.num_layers, -1, -1)
 
         return operators_logit, operands_logit
 
