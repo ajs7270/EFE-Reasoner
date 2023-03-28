@@ -82,6 +82,30 @@ class AwareDecoder(nn.Module):
         # deductive reasoner와 같은 방식을 사용하지 않기 때문에 dumy classifier가 소용이 없다.
         # self.dummy_classifier = nn.Linear(self.hidden_dim, 2) # dummy or not을 classification
 
+    def get_operand_vector(self, i, j, operand_idx: torch.Tensor) -> torch.Tensor:
+        # operand_index : [B, T, A]
+        # operand_vector : [B, T, A, H]
+        operand_idx = operand_idx[:,i,j].clone()
+        batch_size, = operand_idx.size()
+        operands_prediction_vectors = torch.zeros(batch_size, self.hidden_dim, device=operand_idx.device)
+        for batch_idx in range(batch_size):
+            if 0 <= operand_idx[batch_idx] < self.const_num:
+                operands_prediction_vectors[batch_idx, :] = self.operand_projection(
+                    self.const_vector[operand_idx[batch_idx], :])  # [H]
+
+            # fetch number vector
+            operand_idx[batch_idx] -= self.const_num
+            if 0 <= operand_idx[batch_idx] < self.max_number_size:
+                operands_prediction_vectors[batch_idx, :] = self.operand_projection(
+                    self.number_vector[batch_idx, operand_idx[batch_idx], :])
+
+            # fetch previous result vector
+            operand_idx[batch_idx] -= self.max_number_size
+            if 0 <= operand_idx[batch_idx] < self.max_equation:
+                operands_prediction_vectors[batch_idx, :] = self.previous_result_vector[batch_idx,
+                                                                  operand_idx[batch_idx], :]
+        return operands_prediction_vectors
+
     def forward(self,
                 # B : Batch size
                 # S : Max length of tokenized problem text (Source)
@@ -95,6 +119,8 @@ class AwareDecoder(nn.Module):
                 attention_mask: torch.Tensor,  # [B, S] : Language model attention mask
                 question_mask: torch.Tensor,  # [B, S] : Language model question mask
                 number_mask: torch.Tensor,  # [B, S] : Language model number mask
+                gold_operators: torch.Tensor,  # [B, T] : Gold operator
+                gold_operands: torch.Tensor,  # [B, T, A] : Gold operand
                 ) -> tuple[torch.Tensor, torch.Tensor]:  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand logit
         # : Operator, Operand prediction, + 1 is padding
         # operand candidate vector setup : const vector(dataset 만들때 생성해서, 이 모델의 init 단계에서 설정), number vector, previous result vector
@@ -140,10 +166,26 @@ class AwareDecoder(nn.Module):
             # 2. Operand prediction
             for j in range(self.max_arity):
                 if j == 0:
-                    x = torch.unsqueeze(operators_prediction_vectors[:, i, :], dim=1)  # [B, 1(Sequence Length), H]
-                    hx = torch.unsqueeze(context_vector, dim=0)  # [1, B, H]
+                    if self.training: # teacher forcing
+                        x = torch.unsqueeze(
+                            self.operator_projection(
+                                torch.index_select(self.operator_vector, dim=0, index=gold_operators[:, i])),
+                            dim=1
+                        )
+                    else:
+                        x = torch.unsqueeze(operators_prediction_vectors[:, i, :], dim=1)  # [B, 1(Sequence Length), H]
+
+                    hx = torch.unsqueeze(context_vector, dim=0).expand(self.num_layers, -1, -1)  # [1, B, H]
                 else:
-                    x = torch.unsqueeze(operands_prediction_vectors[:, i, j - 1, :], dim=1)  # [B, 1(Sequence Length), H]
+                    if self.training: # teacher forcing
+                        # operand의 경우 3가지 경우의 수에서 답을 가져와야 하기 때문에 함수로 빼야 한다.
+                        x = torch.unsqueeze(
+                            self.get_operand_vector(i,j - 1, gold_operands),
+                            dim=1
+                        )
+                    else:
+                        x = torch.unsqueeze(operands_prediction_vectors[:, i, j - 1, :], dim=1)  # [B, 1(Sequence Length), H]
+
                     hx = hx  # previous hidden state
 
                 x, hx = self.operand_gru(x, hx=hx)  # [B, 1(Sequence Length), H], [1, B, H]
