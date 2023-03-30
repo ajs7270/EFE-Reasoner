@@ -84,6 +84,7 @@ class WrapperModel(pl.LightningModule):
                                     max_equation=dataset_config["max_operators_size"],
                                     max_arity=max(map(max, dataset_config['operator_dict'].values())),
                                     label_pad_id=label_pad_id,
+                                    tokenizer_pad_id=self.config.pad_token_id,
                                     concat=concat)
 
     def _get_vectors(self, ids_list: list[torch.Tensor], concat: bool) -> torch.Tensor:
@@ -102,7 +103,11 @@ class WrapperModel(pl.LightningModule):
         return torch.stack(vectors) # [N_C, H*2] or [N_C, H] according to concat
 
     def forward(self, x: Feature):
-        encoder_output = self.encoder(x.input_ids).last_hidden_state
+        encoder_output = self.encoder(
+            input_ids=x.input_ids,
+            attention_mask=x.attention_mask,
+        ).last_hidden_state
+
         operator_logit, operand_logit = self.decoder(
             encoder_output,
             x.attention_mask,

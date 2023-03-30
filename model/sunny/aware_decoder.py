@@ -13,7 +13,8 @@ class AwareDecoder(nn.Module):
                  max_number_size: int,  # OPERAND : NUMBER (max count in the question)
                  max_equation: int,     # OPERAND : PREVIOUS_RESULT (max count in equations)
                  max_arity: int,
-                 label_pad_id: int,
+                 label_pad_id: int,     # (OperatorLabelEncoder and OperandLabelEncoder)'s pad id
+                 tokenizer_pad_id: int, # (Tokenizer)'s pad id
                  concat: bool = True):
         super().__init__()
         # configuration setting
@@ -21,6 +22,7 @@ class AwareDecoder(nn.Module):
         self.num_layers = num_layers
         self.operator_num = operator_num
         self.label_pad_id = label_pad_id
+        self.tokenizer_pad_id = tokenizer_pad_id
         self.const_num = const_num
         self.max_equation = max_equation
         self.max_number_size = max_number_size
@@ -34,8 +36,9 @@ class AwareDecoder(nn.Module):
 
         # operator candidate vector
         # N_O : number of operator
-        self.operator_vector = nn.Parameter(operator_vector)  # [N_O, H] or [N_O, H*2] regarding concat
+        self.operator_vector = nn.Parameter(operator_vector)    # [N_O, H] or [N_O, H*2] regarding concat
         assert self.operator_num == self.operator_vector.size(0)
+        self.embedding = nn.Embedding(1, self.hidden_dim)       # for [SOS] token embedding
 
         # operator, operand projection layer
         hidden_dim = self.hidden_dim * 2 if self.concat else self.hidden_dim
@@ -50,10 +53,15 @@ class AwareDecoder(nn.Module):
 
         # operator classifier
         self.operator_classifier = nn.Sequential(
-          nn.Linear(self.hidden_dim, self.hidden_dim//2),
-          nn.ReLU(),
-          nn.Linear(self.hidden_dim//2, self.operator_num)
+          nn.Linear(self.hidden_dim, self.operator_num)
         )
+
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=self.hidden_dim,
+            nhead=8,
+            batch_first=True,
+        )
+        self.operator_transformer = nn.TransformerDecoder(decoder_layer, num_layers=self.num_layers)
 
         # operand classifier : operand는 여러개가 뽑혀야 하므로 일반적인 classifier를 사용해서는 안됨 => gru같은 neural network을 사용해야 함
         self.operand_gru = nn.GRU(input_size=self.hidden_dim,
@@ -113,6 +121,11 @@ class AwareDecoder(nn.Module):
                                                                   operand_idx[batch_idx], :]
         return operands_prediction_vectors
 
+    def generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
     def forward(self,
                 # B : Batch size
                 # S : Max length of tokenized problem text (Source)
@@ -126,8 +139,8 @@ class AwareDecoder(nn.Module):
                 attention_mask: torch.Tensor,  # [B, S] : Language model attention mask
                 question_mask: torch.Tensor,  # [B, S] : Language model question mask
                 number_mask: torch.Tensor,  # [B, S] : Language model number mask
-                gold_operators: torch.Tensor,  # [B, T] : Gold operator
-                gold_operands: torch.Tensor,  # [B, T, A] : Gold operand
+                gold_operators: torch.Tensor,  # [B, T+1] : Gold operator
+                gold_operands: torch.Tensor,  # [B, T+1, A] : Gold operand
                 ) -> tuple[torch.Tensor, torch.Tensor]:  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand logit
         # : Operator, Operand prediction, + 1 is padding
         # operand candidate vector setup : const vector(dataset 만들때 생성해서, 이 모델의 init 단계에서 설정), number vector, previous result vector
@@ -138,39 +151,54 @@ class AwareDecoder(nn.Module):
         self.previous_result_vector = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)  # [B, T, H]
 
         # Initialize return values
-        operators_logit = torch.zeros(input.size(0), self.max_equation, self.operator_num).to(device)
         operands_logit = torch.zeros(input.size(0), self.max_equation, self.max_arity,
                                      self.const_num + self.max_number_size + self.max_equation).to(device)  # PAD(None) + CONST + NUM + PREVIOUS RESULT
-        operators_prediction_vectors = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)
+        gold_operator_vectors = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)
         operands_prediction_vectors = torch.zeros(input.size(0), self.max_equation, self.max_arity, self.hidden_dim).to(device)
 
-        # Equation prediction
+
+        # 1. Operator prediction
+        # memory : input [B, S, H]
+        # gold_operator_vectors : LM caching을 사용한 tgt Embedding [B, T, H]
+        # operator_output : [B, T, H]
+        # operator_logit : [B, T, N_O]
+        none_idx = 0
+        context_vector = input[:, 0, :]  # [B, H]
+
         for i in range(self.max_equation):
+            gold_operator_vectors[:, i, :] = self.operator_projection(torch.index_select(self.operator_vector, dim=0,
+                                                                       index=gold_operators[:, i]))  # [B, H]
+        # tgt_key_padding_mask : [B, T] => [B, T+1[sos]]
+        tgt_key_padding_mask = (gold_operators == none_idx)  # [B, T]  [False, False False, ..., True, True, True]
+        tgt_key_padding_mask = torch.cat([torch.zeros(input.size(0), 1, device=device).bool(), tgt_key_padding_mask], dim=1)
 
-            if i == 0:
-                # how to use context vector? 1) cls , 2) mean 3) custom attention
-                # Context vector using <SOS> token
-                context_vector = input[:, 0, :]  # [B, H]
+        memory_key_padding_mask = (attention_mask != self.tokenizer_pad_id)  # [B, S] [False, False False, ..., True, True, True]
 
-                # # mean
-                # context_vector = torch.mean(input, dim=1) # [B, H]
+        # 1. <sos> token을 추가
+        # <sos> token [1, H] => [B, 1, H]
+        batch_sos_embedding = self.embedding(torch.Tensor([0]).long()).unsqueeze(dim=0).repeat(input.size(0), 1, 1)
+        assert batch_sos_embedding.size() == (input.size(0), 1, self.hidden_dim)
 
-                # # custom attention
-                # context_vector, _ = self.context_attention(input, input, input, attn_mask=attention_mask) # [B, S, H]
-                # context_vector = context_vector[:, 0, :] # [B, H]
-                # context_vector = context_vector.unsqueeze(1) # [B, 1, H]
-            else:
-                context_vector, _ = self.context_gru(context_vector, hx=context_vector_hx.contiguous())
-                context_vector = context_vector.squeeze(1)  # [B, H]
+        # gold_operator_vectors : [B, T, H]
+        gold_operator_vectors = torch.cat([batch_sos_embedding, gold_operator_vectors], dim=1)  # [B, T+1[sos], H]
 
-            # 1. Operator prediction
-            # get operator vector
-            operators_logit[:, i, :] = self.operator_classifier(context_vector)  # [B, N_O]
-            operator_index = torch.argmax(operators_logit[:, i, :], dim=1)  # [B]
-            operators_prediction_vectors[:, i, :] = self.operator_projection(torch.index_select(self.operator_vector, dim=0,
-                                                                       index=operator_index))  # [B, H]
+        # tgt_mask(attention mask) : [T, T] => [T+1[sos], T+1[sos]]
+        # attention mask는 batch size를 신경쓰지 않고 넣어주고, batch size만큼 reshape 해주는 과정은 transformer forward 함수 내부에서 진행
+        tgt_mask = self.generate_square_subsequent_mask(self.max_equation + 1).to(device)  # [T+1[sos], T+1[sos]]
 
-            # 2. Operand prediction
+        operator_output = self.operator_transformer(
+            tgt= gold_operator_vectors, # [B, T, H] => [B, T+1[sos], H]
+            memory=input, # [B, S, H]
+            tgt_mask=tgt_mask, # [B, T, T] => [B, T+1[sos], T+1[sos]]
+            tgt_key_padding_mask=tgt_key_padding_mask, # [B, T+1[sos]]
+            memory_key_padding_mask=memory_key_padding_mask # [B, S]
+        )
+
+        operators_logit = self.operator_classifier(operator_output)  # [B, T+1[eos], N_O]
+
+        # 2. Operand prediction
+        # operand는 전체를 다 계산하고, 불필요한 부분은 loss 계산에서 제외한다.
+        for i in range(self.max_equation):
             for j in range(self.max_arity):
                 if j == 0:
                     if self.training: # teacher forcing
@@ -180,9 +208,9 @@ class AwareDecoder(nn.Module):
                             dim=1
                         )
                     else:
-                        x = torch.unsqueeze(operators_prediction_vectors[:, i, :], dim=1)  # [B, 1(Sequence Length), H]
+                        x = torch.unsqueeze(operator_output[:, i, :], dim=1)  # [B, 1(Sequence Length), H]
 
-                    hx = torch.unsqueeze(context_vector, dim=0).expand(self.num_layers, -1, -1)  # [1, B, H]
+                    hx = torch.unsqueeze(context_vector, dim=0).expand(self.num_layers, -1, -1)  # [num_layers , B, H]
                 else:
                     if self.training: # teacher forcing
                         # operand의 경우 3가지 경우의 수에서 답을 가져와야 하기 때문에 함수로 빼야 한다.
@@ -229,10 +257,6 @@ class AwareDecoder(nn.Module):
                 if max(self.previous_result_vector[batch_idx, i, :]).item() == 0:
                     # 마지막 operand의 예측값으로 update
                     self.previous_result_vector[batch_idx, i, :] = operands_prediction_vectors[batch_idx, i, -1, :]
-
-            # 4. Update context vector
-            context_vector = context_vector.unsqueeze(dim=1)
-            context_vector_hx = self.previous_result_vector[:, i, :].unsqueeze(dim=0).expand(self.num_layers, -1, -1)
 
         return operators_logit, operands_logit
 

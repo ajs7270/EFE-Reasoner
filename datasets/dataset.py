@@ -259,9 +259,9 @@ class Dataset(data.Dataset):
         max_operator_operands_size = max(map(max, self.config['operator_dict'].values()))
 
         input_ids = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
-        attention_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
-        question_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
-        number_mask = torch.full((bsz, max_input_ids), self.tokenizer.pad_token_id)
+        attention_mask = torch.full((bsz, max_input_ids), 0)
+        question_mask = torch.full((bsz, max_input_ids), 0)
+        number_mask = torch.full((bsz, max_input_ids), 0)
         operator_label = torch.full((bsz, max_operators_size), self.operator_encoder.encode("PAD").item())
         operand_label = torch.full((bsz, max_operators_size, max_operator_operands_size),
                                    self.operand_encoder.encode("PAD").item())
