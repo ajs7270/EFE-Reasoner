@@ -176,7 +176,7 @@ class AwareDecoder(nn.Module):
 
         # 1. <sos> token을 추가
         # <sos> token [1, H] => [B, 1, H]
-        batch_sos_embedding = self.embedding(torch.Tensor([0]).long()).unsqueeze(dim=0).repeat(input.size(0), 1, 1)
+        batch_sos_embedding = self.embedding(torch.Tensor([0]).to(device).long()).unsqueeze(dim=0).repeat(input.size(0), 1, 1)
         assert batch_sos_embedding.size() == (input.size(0), 1, self.hidden_dim)
 
         # gold_operator_vectors : [B, T, H]
