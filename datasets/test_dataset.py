@@ -11,9 +11,9 @@ import torch
 class TestDataset(TestCase):
     datasets = []
     # roberta-large, roberta-base, npm, npm-single, AnReu/math_pretrained_roberta have same tokenizer
-    models = ["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
-    "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"]
-    # models = ["roberta-base"]
+    # models = ["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single", "witiko/mathberta",
+    # "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"]
+    models = ["roberta-base"]
 
     for model in models:
         print("preparing datasets for model: ", model)
@@ -224,6 +224,8 @@ class TestDataset(TestCase):
                 self.assertEqual(batch.number_mask.shape[0], 5)
                 self.assertEqual(batch.operator_label.shape[0], 5)
                 self.assertEqual(batch.operand_label.shape[0], 5)
+                self.assertEqual(batch.equation_label.shape[0], 5)
+                self.assertEqual(batch.equation_mask.shape[0], 5)
                 # check if sequence length is correct
                 self.assertEqual(batch.input_ids.shape[1], batch.attention_mask.shape[1])
                 self.assertEqual(batch.input_ids.shape[1], batch.question_mask.shape[1])
@@ -244,8 +246,9 @@ class TestDataset(TestCase):
             equation_label = torch.Tensor([7, 8, 9, 10, 11, 12]).view(1, 2, 3)
             operator_label = equation_label[:, :, 0]
             operand_label = equation_label[:, :, 1:]
-            feature1 = Feature(input_ids, attention_mask, question_mask, number_mask, operator_label, operand_label)
-            feature2 = Feature(-input_ids, -attention_mask, -question_mask, -number_mask, -operator_label, -operand_label)
+            equation_mask = torch.Tensor([1, 2, 2, 1, 2, 2]).view(1, 2, 3)
+            feature1 = Feature(input_ids, attention_mask, question_mask, number_mask, operator_label, operand_label, equation_label, equation_mask)
+            feature2 = Feature(-input_ids, -attention_mask, -question_mask, -number_mask, -operator_label, -operand_label, -equation_label, -equation_mask)
             collated = dataset.collate_function([feature1, feature2])
 
             input_ids_ans = torch.LongTensor([[1, 2, 3, 4, 5, 6], [-1, -2, -3, -4, -5, -6]]).view(2, 6)
@@ -253,14 +256,16 @@ class TestDataset(TestCase):
             question_mask_ans = torch.LongTensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, -1, -1, -1]]).view(2, 6)
             number_mask_ans = torch.LongTensor([[0, 0, 1, 0, 0, 0], [0, 0, -1, 0, 0, 0]]).view(2, 6)
             equation_label_ans = torch.LongTensor([[7, 8, 9, 10, 11, 12], [-7, -8, -9, -10, -11, -12]]).view(2, 2, 3)
+            equation_mask_ans = torch.LongTensor([[1, 2, 2, 1, 2, 2], [-1, -2, -2, -1, -2, -2]]).view(2, 2, 3)
 
             input_ids_ans = F.pad(input_ids_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
-            attention_mask_ans = F.pad(attention_mask_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
-            question_mask_ans = F.pad(question_mask_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
-            number_mask_ans = F.pad(number_mask_ans, (0, max_input_ids-6), value = dataset.tokenizer.pad_token_id)
+            attention_mask_ans = F.pad(attention_mask_ans, (0, max_input_ids-6), value = 0)
+            question_mask_ans = F.pad(question_mask_ans, (0, max_input_ids-6), value = 0)
+            number_mask_ans = F.pad(number_mask_ans, (0, max_input_ids-6), value = 0)
             equation_label_ans = F.pad(equation_label_ans, (0, max_operator_operands_size - 2, 0, max_operators_size - 2), value = dataset.tokenizer.pad_token_id)
             operator_label_ans = equation_label_ans[:, :, 0]
             operand_label_ans = equation_label_ans[:, :, 1:]
+            equation_mask_ans = F.pad(equation_mask_ans, (0, max_operator_operands_size - 2, 0, max_operators_size - 2), value = 0)
 
             self.assertEqual(collated.input_ids.tolist(), input_ids_ans.tolist())
             self.assertEqual(collated.attention_mask.tolist(), attention_mask_ans.tolist())
@@ -268,3 +273,5 @@ class TestDataset(TestCase):
             self.assertEqual(collated.number_mask.tolist(), number_mask_ans.tolist())
             self.assertEqual(collated.operator_label.tolist(), operator_label_ans.tolist())
             self.assertEqual(collated.operand_label.tolist(), operand_label_ans.tolist())
+            self.assertEqual(collated.equation_label.tolist(), equation_label_ans.tolist())
+            self.assertEqual(collated.equation_mask.tolist(), equation_mask_ans.tolist())

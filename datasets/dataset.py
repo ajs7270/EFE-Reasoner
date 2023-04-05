@@ -29,7 +29,8 @@ class Feature:
     number_mask: torch.Tensor       # [B, S]
     operator_label: torch.tensor    # [B, T]
     operand_label: torch.tensor     # [B, T, A], type : constant, number in problem, previous step result
-
+    equation_label: torch.Tensor    # [B, T, A+1]
+    equation_mask: torch.Tensor     # [B, T, A+1] 0: padding, 1: operator, 2: operand
 
 @dataclass
 class Problem:
@@ -127,7 +128,7 @@ class Dataset(data.Dataset):
                         attention_mask.shape[1])
 
         # equation label
-        operator_label, operand_label = self._convert_equation_label(problem.equation)
+        operator_label, operand_label, equation_label, equation_mask = self._convert_equation_label(problem.equation)
 
         assert len(operator_label.shape) == 2 and len(operand_label.shape) == 3, \
             "dimension of operator_label must be 2, operand_label must be 3"
@@ -144,7 +145,9 @@ class Dataset(data.Dataset):
                        question_mask=question_mask,
                        number_mask=number_mask,
                        operator_label=operator_label,
-                       operand_label=operand_label)
+                       operand_label=operand_label,
+                       equation_label=equation_label,
+                       equation_mask=equation_mask)
 
     @staticmethod
     def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None, model_name=None):
@@ -210,7 +213,7 @@ class Dataset(data.Dataset):
 
         return problem_text
 
-    def _convert_equation_label(self, equation: list[list[str]]) -> tuple[torch.Tensor, torch.Tensor]:
+    def _convert_equation_label(self, equation: list[list[str]]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # maximum arity of equation: max(operands + 1(operator), for all equation[i])
         max_arity = 0
         for i in range(len(equation)):
@@ -218,16 +221,21 @@ class Dataset(data.Dataset):
         # [T]
         operator_label = torch.full([len(equation)], self.operator_encoder.encode("PAD").item())
         operand_label = torch.full([len(equation), max_arity], self.operand_encoder.encode("PAD").item())
-
+        equation_label = torch.full([len(equation), max_arity + 1], self.operator_encoder.encode("PAD").item())
+        equation_mask = torch.zeros([len(equation), max_arity + 1])
         for i in range(len(equation)):
             for j in range(len(equation[i])):
                 if j == 0:
+                    equation_mask[i][j] = 1
+                    equation_label[i][j] = self.operator_encoder.encode(equation[i][j])
                     operator_label[i] = self.operator_encoder.encode(equation[i][j])
                 else:
+                    equation_mask[i][j] = 2
+                    equation_label[i][j] = self.operand_encoder.encode(equation[i][j])
                     operand_label[i][j - 1] = self.operand_encoder.encode(equation[i][j])
 
-        # [T] -> [B, T], [T, A] -> [B, T, A]
-        return operator_label.unsqueeze(dim=0), operand_label.unsqueeze(dim=0)
+        # [T] -> [1, T], [T, A] -> [1, T, A], [T, A+1] -> [1, T, A+1], [T, A+1] -> [1, T, A+1]
+        return operator_label.unsqueeze(dim=0), operand_label.unsqueeze(dim=0), equation_label.unsqueeze(dim=0), equation_mask.unsqueeze(dim=0)
 
     def _get_available_operand_list(self, constant_list: List[str]) -> List[str]:
         ret = []
@@ -265,7 +273,8 @@ class Dataset(data.Dataset):
         operator_label = torch.full((bsz, max_operators_size), self.operator_encoder.encode("PAD").item())
         operand_label = torch.full((bsz, max_operators_size, max_operator_operands_size),
                                    self.operand_encoder.encode("PAD").item())
-
+        equation_label = torch.full((bsz, max_operators_size, max_operator_operands_size+1), self.operator_encoder.encode("PAD").item())
+        equation_mask = torch.zeros((bsz, max_operators_size, max_operator_operands_size+1))
         for i in range(bsz):
             input_ids[i, :batch[i].input_ids.shape[1]] = batch[i].input_ids[0]
             attention_mask[i, :batch[i].attention_mask.shape[1]] = batch[i].attention_mask[0]
@@ -274,8 +283,12 @@ class Dataset(data.Dataset):
             operator_label[i, :batch[i].operator_label.shape[1]] = batch[i].operator_label[0]
             operand_label[i, :batch[i].operand_label.shape[1], :batch[i].operand_label.shape[2]] = \
                 batch[i].operand_label[0]
-
-        return Feature(input_ids, attention_mask, question_mask, number_mask, operator_label, operand_label)
+            equation_label[i, :batch[i].equation_label.shape[1], :batch[i].equation_label.shape[2]] = \
+                batch[i].equation_label[0]
+            equation_mask[i, :batch[i].equation_mask.shape[1], :batch[i].equation_mask.shape[2]] = \
+                batch[i].equation_mask[0]
+        return Feature(input_ids, attention_mask, question_mask, number_mask, operator_label, operand_label,
+                       equation_label, equation_mask)
 
     @property
     def pad_id(self):
