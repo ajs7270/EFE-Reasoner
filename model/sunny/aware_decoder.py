@@ -1,6 +1,29 @@
+import math
+
 import torch
 from torch import nn
 
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(1, max_len, d_model)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
 
 class AwareDecoder(nn.Module):
     def __init__(self,
@@ -39,6 +62,9 @@ class AwareDecoder(nn.Module):
         self.operator_vector = nn.Parameter(operator_vector)    # [N_O, H] or [N_O, H*2] regarding concat
         assert self.operator_num == self.operator_vector.size(0)
         self.embedding = nn.Embedding(1, self.hidden_dim)       # for [SOS] token embedding
+
+        # positional encoding
+        self.pos_encoder = PositionalEncoding(self.hidden_dim, dropout=0.1)
 
         # operator, operand projection layer
         hidden_dim = self.hidden_dim * 2 if self.concat else self.hidden_dim
@@ -181,7 +207,8 @@ class AwareDecoder(nn.Module):
 
         # gold_operator_vectors : [B, T, H]
         gold_operator_vectors = torch.cat([batch_sos_embedding, gold_operator_vectors], dim=1)  # [B, T+1[sos], H]
-
+        # add position encoding
+        gold_operator_vectors = self.pos_encoder(gold_operator_vectors)  # [B, T+1[sos], H]
         # tgt_mask(attention mask) : [T, T] => [T+1[sos], T+1[sos]]
         # attention mask는 batch size를 신경쓰지 않고 넣어주고, batch size만큼 reshape 해주는 과정은 transformer forward 함수 내부에서 진행
         tgt_mask = self.generate_square_subsequent_mask(self.max_equation + 1).to(device)  # [T+1[sos], T+1[sos]]
