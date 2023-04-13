@@ -87,7 +87,12 @@ class AwareDecoder(nn.Module):
             nhead=8,
             batch_first=True,
         )
+
         self.operator_transformer = nn.TransformerDecoder(decoder_layer, num_layers=self.num_layers)
+        self.operand_transformer = nn.TransformerDecoder(decoder_layer, num_layers=self.num_layers)
+
+        # fc layer that projects the operator + operand vectors into a length H vector
+        self.equation_result_projection = nn.Linear(self.hidden_dim * (self.max_arity + 1), self.hidden_dim)
 
         # operand classifier : operand는 여러개가 뽑혀야 하므로 일반적인 classifier를 사용해서는 안됨 => gru같은 neural network을 사용해야 함
         self.operand_gru = nn.GRU(input_size=self.hidden_dim,
@@ -122,6 +127,26 @@ class AwareDecoder(nn.Module):
         # dummy classifier
         # deductive reasoner와 같은 방식을 사용하지 않기 때문에 dumy classifier가 소용이 없다.
         # self.dummy_classifier = nn.Linear(self.hidden_dim, 2) # dummy or not을 classification
+    def _get_operand_vector(self, batch_idx:int , idx: int)-> torch.Tensor:
+        """
+        get operand vector in a problem (not batch)
+        :param idx: index of operand
+        :param number_vector: number vector (LM caching) in a problem [N_Q, H]
+        :return: operand vector [H]
+        """
+        # fetch constant vector
+        if 0 <= idx < self.const_num:
+            return self.operand_projection(self.const_vector[idx, :])  # [H]
+
+        # fetch number vector
+        idx -= self.const_num
+        if 0 <= idx < self.max_number_size:
+            return self.operand_projection(self.number_vector[batch_idx, idx, :]) # [H]
+
+        # fetch previous result vector
+        idx -= self.max_number_size
+        if 0 <= idx < self.max_equation:
+            return self.previous_result_vector[batch_idx, idx, :]
 
     def get_operand_vector(self, i, j, operand_idx: torch.Tensor) -> torch.Tensor:
         # operand_index : [B, T, A]
@@ -130,22 +155,22 @@ class AwareDecoder(nn.Module):
         batch_size, = operand_idx.size()
         operands_prediction_vectors = torch.zeros(batch_size, self.hidden_dim, device=operand_idx.device)
         for batch_idx in range(batch_size):
-            if 0 <= operand_idx[batch_idx] < self.const_num:
-                operands_prediction_vectors[batch_idx, :] = self.operand_projection(
-                    self.const_vector[operand_idx[batch_idx], :])  # [H]
-
-            # fetch number vector
-            operand_idx[batch_idx] -= self.const_num
-            if 0 <= operand_idx[batch_idx] < self.max_number_size:
-                operands_prediction_vectors[batch_idx, :] = self.operand_projection(
-                    self.number_vector[batch_idx, operand_idx[batch_idx], :])
-
-            # fetch previous result vector
-            operand_idx[batch_idx] -= self.max_number_size
-            if 0 <= operand_idx[batch_idx] < self.max_equation:
-                operands_prediction_vectors[batch_idx, :] = self.previous_result_vector[batch_idx,
-                                                                  operand_idx[batch_idx], :]
+            operands_prediction_vectors[batch_idx, :] = self._get_operand_vector(operand_idx[batch_idx])
         return operands_prediction_vectors
+
+    def get_arity_vector(self, index: torch.Tensor) -> torch.Tensor:
+        """
+        get arity vector in a problems(parallel)
+
+        :param index: [B, A]
+        :return: [B, A, H]
+        """
+        batch_size, _ = index.size()
+        arity_vector = torch.zeros(batch_size, self.max_arity, self.hidden_dim, device=index.device)
+        for batch_idx in range(batch_size):
+            for i in range(self.max_arity):
+                arity_vector[batch_idx, i, :] = self._get_operand_vector(batch_idx, index[batch_idx, i].item())
+        return arity_vector
 
     def generate_square_subsequent_mask(self, sz):
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
@@ -170,8 +195,8 @@ class AwareDecoder(nn.Module):
                 ) -> tuple[torch.Tensor, torch.Tensor]:  # [[B, T, N_O], [B, T, A, N_D]] : Operator, Operand logit
         # : Operator, Operand prediction, + 1 is padding
         # operand candidate vector setup : const vector(dataset 만들때 생성해서, 이 모델의 init 단계에서 설정), number vector, previous result vector
-        # self.number_vector = torch.zeros(input.size(0), self.max_number_size,
-        #                                  self.hidden_dim * 2 if self.concat else self.hidden_dim)
+        self.number_vector = torch.zeros(input.size(0), self.max_number_size,
+                                         self.hidden_dim * 2 if self.concat else self.hidden_dim)
         device = input.device
         self.number_vector = self._get_num_vec(input, number_mask, self.max_number_size, concat=self.concat).to(device)  # [N_Q, H] or [N_Q, H*2]
         self.previous_result_vector = torch.zeros(input.size(0), self.max_equation, self.hidden_dim).to(device)  # [B, T, H]
@@ -202,7 +227,7 @@ class AwareDecoder(nn.Module):
 
         # 1. <sos> token을 추가
         # <sos> token [1, H] => [B, 1, H]
-        batch_sos_embedding = self.embedding(torch.Tensor([0]).to(device).long()).unsqueeze(dim=0).repeat(input.size(0), 1, 1)
+        batch_sos_embedding = self.embedding(torch.LongTensor([0]).to(device)).unsqueeze(dim=0).repeat(input.size(0), 1, 1)
         assert batch_sos_embedding.size() == (input.size(0), 1, self.hidden_dim)
 
         # gold_operator_vectors : [B, T, H]
@@ -214,76 +239,66 @@ class AwareDecoder(nn.Module):
         tgt_mask = self.generate_square_subsequent_mask(self.max_equation + 1).to(device)  # [T+1[sos], T+1[sos]]
 
         operator_output = self.operator_transformer(
-            tgt= gold_operator_vectors, # [B, T, H] => [B, T+1[sos], H]
+            tgt= gold_operator_vectors, # [B, T+1[sos], H]
             memory=input, # [B, S, H]
-            tgt_mask=tgt_mask, # [B, T, T] => [B, T+1[sos], T+1[sos]]
+            tgt_mask=tgt_mask, # [T+1[sos], T+1[sos]]
             tgt_key_padding_mask=tgt_key_padding_mask, # [B, T+1[sos]]
             memory_key_padding_mask=memory_key_padding_mask # [B, S]
-        )
+        ) # -> [B, T+1[eos], H]
 
-        operators_logit = self.operator_classifier(operator_output)  # [B, T+1[eos], N_O]
+        operators_logit = self.operator_classifier(operator_output)  # [B, T+1[eos], H] -> [B, T+1[eos], N_O]
 
         # 2. Operand prediction
+        # Operator가 다 계산돼서 이제 각 operator마다 operand를 계산해야 하는데,
+        # 그렇게 하기 위해서 각 배치마다 결과를 모아서 tgt로 넣어주어야 한다.
+        # 두 가지 방식이 존재할 수 있다.
+        # 1. (데이터셋 하나씩 끝내는 방식)하나의 배치에 있는 모든 operator에 대해 한번에 값을 계산할 수 있는 방식
+        # 2. (병렬로 끝내는 방식) => (우리의 선택)
         # operand는 전체를 다 계산하고, 불필요한 부분은 loss 계산에서 제외한다.
+
+        # Operand Transformer Input Shape
+        # memory : [B, S, H] Question context
+        # input : [B, A+1[OP-start], H] Output of operator prediction ([SOS] token is not included)
+        # output : [B, A+1[OP-start], N_D]
+        # Operand Transformer를 T번 통과시킴 -> T번 통과시키면서 얻은 값들은 concat해서 리턴해줌
+
+        # eg. operand
+        # tgt = ["+", "2", "3", "", "-", "3", "4", "", "", "", "", ""]
+        # 중요한 건 <sos>에 positional encoding을 더해주는 것 => 그래야지 operand transformer가 몇 번째 operator를 평가하는지 알 수 있음
+        # 그래서 굳이 앞에 연산자와 피연산자들을 더해줄 필요는 없다.
+
         for i in range(self.max_equation):
+            gold_operand_vectors = torch.zeros(input.size(0), self.max_arity + 1, self.hidden_dim).to(device)
+            # 각 배치의 i번째 operator에 대한 gold operand vector를 가져옴
+            operand_sos_vector = self.operator_projection(torch.index_select(self.operator_vector, dim=0,
+                                                              index=gold_operators[:, i])).unsqueeze(dim=1)
+            operand_arity_vectors = self.get_arity_vector(index=gold_operands[:, i, :])
+            gold_operand_vectors = torch.cat([operand_sos_vector, operand_arity_vectors] , dim=1)
+            gold_operand_vectors = self.pos_encoder(gold_operand_vectors)  # [B, A+1[sos], H]
+
+            tgt_mask = self.generate_square_subsequent_mask(self.max_arity + 1).to(device)  # [B, T*A+1[sos], T*A+1[sos]]
+            # tgt_key_padding_mask : [B, T] => [B, T+1[sos]]
+            tgt_key_padding_mask = (gold_operands[:,i,:]== none_idx)  # [B, T]  [False, False False, ..., True, True, True]
+            tgt_key_padding_mask = torch.cat([torch.zeros(input.size(0), 1, device=device).bool(), tgt_key_padding_mask], dim=1)
+
+            operand_output = self.operand_transformer(
+                tgt = gold_operand_vectors, # [B, A+1[sos], H]
+                memory= input, # [B, S, H]
+                tgt_mask= tgt_mask, # [B, A+1[sos], A+1[sos]] tgt_mask가 제대로 동작할까? => 우리는 일반적인 transformer 동작 방식이 아님
+                tgt_key_padding_mask= tgt_key_padding_mask,# [B, A+1[sos]]
+                memory_key_padding_mask=memory_key_padding_mask # [B, S]
+            ) # => [B, A+1[eos], H]
+
+            # operand_output을 이용해서 operand_logit을 만들어야 한다.
             for j in range(self.max_arity):
-                if j == 0:
-                    if self.training: # teacher forcing
-                        x = torch.unsqueeze(
-                            self.operator_projection(
-                                torch.index_select(self.operator_vector, dim=0, index=gold_operators[:, i])),
-                            dim=1
-                        )
-                    else:
-                        x = torch.unsqueeze(operator_output[:, i, :], dim=1)  # [B, 1(Sequence Length), H]
-
-                    hx = torch.unsqueeze(context_vector, dim=0).expand(self.num_layers, -1, -1)  # [num_layers , B, H]
-                else:
-                    if self.training: # teacher forcing
-                        # operand의 경우 3가지 경우의 수에서 답을 가져와야 하기 때문에 함수로 빼야 한다.
-                        x = torch.unsqueeze(
-                            self.get_operand_vector(i,j - 1, gold_operands),
-                            dim=1
-                        )
-                    else:
-                        x = torch.unsqueeze(operands_prediction_vectors[:, i, j - 1, :], dim=1)  # [B, 1(Sequence Length), H]
-
-                    hx = hx  # previous hidden state
-
-                x, hx = self.operand_gru(x, hx=hx.contiguous())  # [B, 1(Sequence Length), H], [1, B, H]
-
-                # get operand vector
-                operand_logit = self.operand_classifier(x.squeeze(dim=1))  # [B, N_D + 1]
+                operand_logit = self.operand_classifier(
+                    operand_output[:, j, :])  # [B, 1(Sequence Length), H] -> [B, N_D + 1]
                 operands_logit[:, i, j, :] = operand_logit  # loss를 구할때는 logit에 softmax 값을 취한 것을 CE Loss로 구해야함
-                operand_idx = torch.argmax(operand_logit, dim=1)
 
-                for batch_idx in range(operand_logit.size(0)):
-                    # fetch constant vector
-                    if 0 <= operand_idx[batch_idx] < self.const_num:
-                        # if current operand is None Vector
-                        if operand_idx[batch_idx] == self.label_pad_id:
-                            # 3. Update operand vector (#0, #1, #2등 이전 연산의 결과)
-                            # 이전 연산결과를 저장해야 하는데, 처음 none이 등장했을 때만 저장
-                            if max(self.previous_result_vector[batch_idx, i, :]).item() == 0:
-                                self.previous_result_vector[batch_idx, i, :] = x[batch_idx, 0, :]
-
-                        operands_prediction_vectors[batch_idx, i, j, :] = self.operand_projection(self.const_vector[operand_idx[batch_idx],:])  # [H]
-
-                    # fetch number vector
-                    operand_idx[batch_idx] -= self.const_num
-                    if 0 <= operand_idx[batch_idx] < self.max_number_size:
-                        operands_prediction_vectors[batch_idx, i, j, :] = self.operand_projection(self.number_vector[batch_idx, operand_idx[batch_idx],:])
-
-                    # fetch previous result vector
-                    operand_idx[batch_idx] -= self.max_number_size
-                    if 0 <= operand_idx[batch_idx] < self.max_equation:
-                        operands_prediction_vectors[batch_idx, i, j, :] = self.previous_result_vector[batch_idx,operand_idx[batch_idx], :]
-
-            # 중간에 none operand가 등장하지 않는 경우 이번 연산 결과를 update
-            for batch_idx in range(input.size(0)):  # batch size
-                if max(self.previous_result_vector[batch_idx, i, :]).item() == 0:
-                    # 마지막 operand의 예측값으로 update
-                    self.previous_result_vector[batch_idx, i, :] = operands_prediction_vectors[batch_idx, i, -1, :]
+            # reshape operand output vector of shape [B, A+1[eos], H] => [B, (A + 1) * H]
+            operand_output = operand_output.reshape(operand_output.size(0), -1)
+            # update previous_result_vector [B, T, H]
+            self.previous_result_vector[:, i, :] = self.equation_result_projection(operand_output) # [B, H]
 
         return operators_logit, operands_logit
 
