@@ -61,6 +61,7 @@ class WrapperModel(pl.LightningModule):
 
         # set encoder
         self.encoder = AutoModel.from_pretrained(self.hparams["bert_model"])
+        self.stored_params = self.encoder.state_dict()
         self.config = AutoConfig.from_pretrained(self.hparams["bert_model"])
 
         # pretrained language model은 fine-tuning하고 싶지 않을 때
@@ -155,6 +156,15 @@ class WrapperModel(pl.LightningModule):
 
         return loss / loss_count
 
+    def _calculate_regularization_loss(self, regularization_weight: float = 0.001) -> torch.Tensor:
+        current_params = self.encoder.state_dict()
+        regularization_loss = sum(torch.norm(p - self.stored_params[k]) for k, p in current_params.items())
+
+        # You can adjust the regularization weight as needed
+        regularization_loss *= regularization_weight
+
+        return regularization_loss
+
     def _get_operator_finish_indexes(self, operator_label: torch.Tensor) -> list[int]:
         op_fin = []
         none_index = 0
@@ -198,8 +208,9 @@ class WrapperModel(pl.LightningModule):
 
         operator_loss = self._calculate_operator_loss(operator_logit, gold_operator_label, op_fin)
         operand_loss = self._calculate_operand_loss(operand_logit, gold_operand_label, op_fin, oe_fin)
+        regularization_loss = self._calculate_regularization_loss()
 
-        return operator_loss, operand_loss
+        return operator_loss, operand_loss, regularization_loss
 
     def _calculate_accuracy(self, batch, operator_logit, operand_logit, type: str ="train"):
 
@@ -263,7 +274,7 @@ class WrapperModel(pl.LightningModule):
     def training_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
-        operator_loss, operand_loss = self._calculate_loss(batch, operator_logit, operand_logit)
+        operator_loss, operand_loss, regularization_loss = self._calculate_loss(batch, operator_logit, operand_logit)
 
         self._calculate_accuracy(batch, operator_logit, operand_logit, "train")
         self.log("train_accuracy", self.train_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -273,14 +284,14 @@ class WrapperModel(pl.LightningModule):
         self.log("train_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("train_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
-        loss = operator_loss + operand_loss
+        loss = operator_loss + operand_loss + regularization_loss
         self.log("train_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
-        operator_loss, operand_loss = self._calculate_loss(batch, operator_logit, operand_logit)
+        operator_loss, operand_loss, regularization_loss = self._calculate_loss(batch, operator_logit, operand_logit)
 
         self._calculate_accuracy(batch, operator_logit, operand_logit, "validation")
         self.log("val_accuracy", self.validation_accuracy, on_step=True, on_epoch=True, sync_dist=True)
@@ -289,14 +300,14 @@ class WrapperModel(pl.LightningModule):
         self.log("val_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("val_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
-        loss = operator_loss + operand_loss
+        loss = operator_loss + operand_loss + regularization_loss
         self.log("val_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def test_step(self, batch: Feature, batch_idx: int) -> torch.Tensor:
         operator_logit, operand_logit = self(batch)  # [B, T, N_O + 1], [B, T, A, N_D + 1]
 
-        operator_loss, operand_loss = self._calculate_loss(batch, operator_logit, operand_logit)
+        operator_loss, operand_loss, regularization_loss = self._calculate_loss(batch, operator_logit, operand_logit)
 
         self._calculate_accuracy(batch, operator_logit, operand_logit, "test")
 
@@ -306,7 +317,7 @@ class WrapperModel(pl.LightningModule):
         self.log("test_operator_loss", operator_loss, on_step=True, on_epoch=True, sync_dist=True)
         self.log("test_operand_loss", operand_loss, on_step=True, on_epoch=True, sync_dist=True)
 
-        loss = operator_loss + operand_loss
+        loss = operator_loss + operand_loss + regularization_loss
         self.log("test_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
