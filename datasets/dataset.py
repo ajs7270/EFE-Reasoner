@@ -106,39 +106,39 @@ class Dataset(data.Dataset):
                                                                                           number_tensors,
                                                                                           self.quant_list_ids,
                                                                                           self.pretrained_model_name)
-        assert num_count == len(number_tensors), "number의 개수가 맞지 않음 {} != {}\n" \
-                                                 "number list : {}\n" \
-                                                 "tokenized problem: {}\n" \
-                                                 "tokenized result : {}\n" \
-                                                 "problem context : {}\n" \
-                                                 "problem question : {}" \
-            .format(num_count, len(number_tensors), number_tensors, tokenized_problem,
-                    self.tokenizer.convert_ids_to_tokens(tokenized_problem[0]), problem_context, problem_question)
+        # assert num_count == len(number_tensors), "number의 개수가 맞지 않음 {} != {}\n" \
+        #                                          "number list : {}\n" \
+        #                                          "tokenized problem: {}\n" \
+        #                                          "tokenized result : {}\n" \
+        #                                          "problem context : {}\n" \
+        #                                          "problem question : {}" \
+        #     .format(num_count, len(number_tensors), number_tensors, tokenized_problem,
+        #             self.tokenizer.convert_ids_to_tokens(tokenized_problem[0]), problem_context, problem_question)
 
         attention_mask = torch.ones_like(tokenized_problem)
 
-        assert tokenized_problem.shape[1] == question_mask.shape[1] == number_mask.shape[1] == \
-               attention_mask.shape[1], \
-            "tokenized_problem.shape[1]: {}\n" \
-            "question_mask.shape[1]: {}\n" \
-            "number_mask.shape[1]: {}\n" \
-            "attention_mask.shape[1]: {}\n" \
-            "모든 shape 같아야 합니다." \
-                .format(tokenized_problem.shape[1], question_mask.shape[1], number_mask.shape[1],
-                        attention_mask.shape[1])
+        # assert tokenized_problem.shape[1] == question_mask.shape[1] == number_mask.shape[1] == \
+        #        attention_mask.shape[1], \
+        #     "tokenized_problem.shape[1]: {}\n" \
+        #     "question_mask.shape[1]: {}\n" \
+        #     "number_mask.shape[1]: {}\n" \
+        #     "attention_mask.shape[1]: {}\n" \
+        #     "모든 shape 같아야 합니다." \
+        #         .format(tokenized_problem.shape[1], question_mask.shape[1], number_mask.shape[1],
+        #                 attention_mask.shape[1])
 
         # equation label
         operator_label, operand_label, equation_label, equation_mask = self._convert_equation_label(problem.equation)
 
-        assert len(operator_label.shape) == 2 and len(operand_label.shape) == 3, \
-            "dimension of operator_label must be 2, operand_label must be 3"
-
-        assert operator_label.shape[:2] == operand_label.shape[:2], \
-            "operator_label.shape[0]: {}, operator_label.shape[1]: {}\n" \
-            "operand_label.shape[0]: {}, operand_label.shape[1]: {}\n" \
-            "operator_label, operand_label must have same 1st dim" \
-                .format(operator_label.shape[0], operator_label.shape[1], operand_label.shape[0],
-                        operand_label.shape[1])
+        # assert len(operator_label.shape) == 2 and len(operand_label.shape) == 3, \
+        #     "dimension of operator_label must be 2, operand_label must be 3"
+        #
+        # assert operator_label.shape[:2] == operand_label.shape[:2], \
+        #     "operator_label.shape[0]: {}, operator_label.shape[1]: {}\n" \
+        #     "operand_label.shape[0]: {}, operand_label.shape[1]: {}\n" \
+        #     "operator_label, operand_label must have same 1st dim" \
+        #         .format(operator_label.shape[0], operator_label.shape[1], operand_label.shape[0],
+        #                 operand_label.shape[1])
 
         return Feature(input_ids=tokenized_problem,
                        attention_mask=attention_mask,
@@ -175,18 +175,9 @@ class Dataset(data.Dataset):
             if torch.equal(tokenized_problem[0][cur:cur + len(quant_list_ids)], quant_list_ids):
                 # number_mask에 숫자의 등장순서에 따라 1,2,3으로 마스킹
                 number_mask = torch.cat([number_mask[:, :cur],
-                                         torch.full(number_tensors[num_count].shape, num_count + 1),
+                                         torch.full(torch.unsqueeze(quant_list_ids,dim=0).shape, num_count + 1),
                                          number_mask[:, cur + len(quant_list_ids):]], dim=1)
-                # question_mask 사이즈 조정
-                question_mask = torch.cat([question_mask[:, :cur],
-                                           torch.full(number_tensors[num_count].shape, question_mask[0, cur]),
-                                           question_mask[:, cur + len(quant_list_ids):]], dim=1)
-                # number_tensors로 치환
-                tokenized_problem = torch.cat([tokenized_problem[:, :cur],
-                                               number_tensors[num_count],
-                                               tokenized_problem[:, cur + len(quant_list_ids):]], dim=1)
 
-                cur += len(number_tensors[num_count][0]) - len(quant_list_ids)
                 num_count += 1
             cur += 1
 

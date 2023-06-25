@@ -16,7 +16,7 @@ def get_project_args():
     parser = ArgumentParser("Project(Sunny) argument")
 
     # Experiment argument
-    parser.add_argument("--wandb", type=int, default=1, help="use wandb")
+    parser.add_argument("--wandb", type=int, default=0, help="use wandb")
     parser.add_argument("--experiment_name", type=str, default="svamp", choices=["mathqa", "svamp"], help="data name")
 
     # wandb argument
@@ -44,7 +44,7 @@ def get_model_args():
     parser = ArgumentParser("Model argument")
 
     # model argument
-    parser.add_argument("--bert_model", type=str, default="roberta-large",
+    parser.add_argument("--bert_model", type=str, default="microsoft/deberta-v3-large",
                         choices=["roberta-large", "roberta-base", "facebook/npm", "facebook/npm-single",
                                  "witiko/mathberta",
                                  "AnReu/math_pretrained_bert", "AnReu/math_pretrained_roberta"],
@@ -62,13 +62,13 @@ def get_trainer_args():
     parser = ArgumentParser("Trainer argument")
 
     # trainer argument
-    parser.add_argument("--devices", type=int, default=-1, help="number of gpus used by accelerator")
-    parser.add_argument("--accelerator", type=str, default="auto", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
+    parser.add_argument("--devices", type=int, default=1, help="number of gpus used by accelerator")
+    parser.add_argument("--accelerator", type=str, default="cpu", choices=["cpu", "gpu", "tpu", "ipu", "auto"],
                         help="choice computing device")
     parser.add_argument("--gradient_clip_val", type=float, default=1.0, help="max grad norm for gradient clipping")
     parser.add_argument("--max_epochs", type=int, default=1000, help="max epoch")
     parser.add_argument("--num_nodes", type=int, default=1, help="number of GPU nodes(computers) for distributed training")
-    parser.add_argument("--precision", default="16",
+    parser.add_argument("--precision", default="32",
                         choices=['64', '32', '16', 'bf16', 64, 32, 16],
                         help="precision")
     parser.add_argument("--profiler", default="simple", choices=[None, "simple", "advanced"],
@@ -143,8 +143,8 @@ def main():
         concat=True,
         dataset_config = data_module.train_dataset.config
     )
-    model.encoder = torch.compile(model.encoder)
-    model.decoder = torch.compile(model.decoder)
+    # model.encoder = torch.compile(model.encoder)
+    # model.decoder = torch.compile(model.decoder)
     # ========================================
 
     # set callbacks
