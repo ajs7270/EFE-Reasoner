@@ -37,6 +37,7 @@ class Problem:
     context: str
     question: str
     numbers: list[str]
+    order: list[str]
     same_number_idx: list[list[int]]
     equation: list[list[str]]
     golden_op: list[str]
@@ -99,7 +100,7 @@ class Dataset(data.Dataset):
         tokenized_problem = self.tokenizer(problem_context, problem_question, return_tensors="pt").input_ids
         tokenized_context = self.tokenizer(problem_context, return_tensors="pt").input_ids
         # 첫번째는 SOS, 마지막은 EOS 토큰이므로 제외시킴
-        number_tensors = [self.tokenizer(number, return_tensors="pt").input_ids[:, 1:-1] for number in problem.numbers]
+        number_tensors = [self.tokenizer(number, return_tensors="pt").input_ids[:, 1:-1] for number in problem.order]
 
         tokenized_problem, question_mask, number_mask, num_count = self._translate2number(tokenized_problem,
                                                                                           tokenized_context,

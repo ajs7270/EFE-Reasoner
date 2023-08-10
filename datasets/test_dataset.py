@@ -22,7 +22,7 @@ class TestDataset(TestCase):
                                 pretrained_model_name=model))
 
 
-    def _prepare_test_translate2number(self, dataset, problem) -> (list, list, list, list, list):
+    def _prepare_test_translate2number(self, dataset, problem) ->(list, list, list, list, list):
         model_name = dataset.pretrained_model_name
         tokenizer = dataset.tokenizer
         feature = dataset._convert_to_feature(problem)
@@ -77,14 +77,15 @@ class TestDataset(TestCase):
         print(f"check models: ", end="")
         for i, dataset in enumerate(self.datasets):
             print("\033[32m" + self.models[i] + "\033[0m", end=", ")
-            # print(dataset.tokenizer(" <quant> ", return_tensors="pt").input_ids[0])
+            # print(dataset.tokenizer("<quant>", return_tensors="pt").input_ids[0])
             # print(dataset.quant_list_ids)
-            # print(dataset.tokenizer.convert_ids_to_tokens(dataset.tokenizer(" <quant> ", return_tensors="pt").input_ids[0]))
+            # print(dataset.tokenizer.convert_ids_to_tokens(dataset.tokenizer("<quant>", return_tensors="pt").input_ids[0]))
             # print(dataset.tokenizer.convert_ids_to_tokens(dataset.quant_list_ids))
             problem_dict1 = {
                 'context': 'sophia finished number0 / number1 of a book . she calculated that she finished number2 more pages than she has yet to read .',
                 'question': 'how long is her book ?',
                 'numbers': ['23838', '32131313', '90'],
+                'order': ['<second>', '<first>', '<third>'],
                 'equation': [['divide', 'n0', 'n1'], ['subtract', 'const_1', '#0'], ['divide', 'n2', '#1']],
                 'golden_op': ['divide', 'subtract', 'divide'],
                 'golden_argument': [['n0', 'n1'], ['const_1', '#0'], ['n2', '#1']],
@@ -104,6 +105,7 @@ class TestDataset(TestCase):
                 "context": "a mixture of number0 liters of milk and water contains number1 % water .",
                 "question": "how much water should be added to this so that water may be number2 % in the new mixture ?",
                 "numbers": ["40", "10", "20"],
+                "order": ["<first>", "<third>", "<second>"],
                 "same_number_idx": [],
                 "equation": [["divide", "n2", "const_100"], ["divide", "n1", "const_100"]],
                 "golden_op": ["divide", "divide", "subtract", "divide", "multiply", "multiply", "subtract", "divide"],
@@ -125,6 +127,8 @@ class TestDataset(TestCase):
                            "inclusive , is drawn is number2 / number3 .",
                 "question": "if the probability that a number number4 or larger is drawn is number5 / number6 , what is the probability that a number less than or equal to number7 is drawn ?",
                 "numbers": ["14", "20", "1434", "6", "1414414", "2", "3", "20"],
+                "order": ["<fourth>", "<third>", "<second>", "<fifth>", "<first>", "<sixth>", "<seventh>",
+                          "<third>"],
                 "same_number_idx": [[0, 1], [2, 3], [4, 5, 6], [7]],
                 "equation": [["divide", "n2", "n3"], ["divide", "n5", "n6"], ["subtract", "const_1", "#0"],
                              ["divide", "n4", "n1"], ["subtract", "const_1", "#1"], ["divide", "n0", "n1"],
@@ -148,6 +152,8 @@ class TestDataset(TestCase):
                 "context": "i . x + number0 y + number1 z = number2 ii . x + y - z = number3 iii .",
                 "question": "number4 x + number5 y - z = number6 what is the value of y in the system above ?",
                 "numbers": ["234", "31444", "772", "055", "0", "2", "1"],
+                "order": ["<third>", "<first>", "<second>", "<fourth>", "<seventh>", "<fifth>",
+                          "<sixth>"],
                 "same_number_idx": [[0, 1], [2, 3], [4, 5, 6]],
                 "equation": [["divide", "n0", "n1"], ["divide", "n2", "n3"], ["divide", "n4", "n5"],
                              ["divide", "n6", "n7"], ["subtract", "const_1", "#0"], ["subtract", "const_1", "#1"],
@@ -175,6 +181,7 @@ class TestDataset(TestCase):
                 "context": ".",
                 "question": "if grapes are number0 % water and raisins are number1 % water , then how many kilograms did a quantity of raisins , which currently weighs number2 kilograms , weigh when all the raisins were grapes ? ( assume that the only difference between their raisin - weight and their grape - weight is water that evaporated during their transformation . )",
                 "numbers": ["90", "233333330", "10"],
+                "order": ["<second>", "<first>", "<third>"],
                 "same_number_idx": [[0, 1], [2]],
                 "equation": [["divide", "n0", "n1"], ["divide", "n2", "const_100"]],
                 "golden_op": ["divide", "divide"],
@@ -194,6 +201,7 @@ class TestDataset(TestCase):
                 "context": "the volume of a sphere with radius r is ( number0 / number1 ) * pi * r ^ number2 and the surface area is number3 * pi * r ^ number4 .",
                 "question": "if a sperical balloon has a volume of number5 pi cubic centimeters , what is hte surface area of the balloon in square centimeters ?",
                 "numbers": ["4", "3", "3", "4", "3", "12345"],
+                "order": ["<second>", "<third>", "<third>", "<second>", "<third>", "<first>"],
                 "same_number_idx": [[0, 1], [2, 3, 4], [5]],
                 "equation": [["divide", "n0", "n1"], ["divide", "n2", "const_100"], ["divide", "n3", "const_100"],
                              ["divide", "n4", "const_100"], ["divide", "n5", "const_100"]],
