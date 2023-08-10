@@ -6,6 +6,7 @@ import copy
 from pathlib import Path
 from typing import Tuple, Optional, Union
 from dataclasses import dataclass
+from utils import ORDER
 
 BASE_PATH = Path(__file__).parent.parent
 
@@ -161,11 +162,37 @@ def start_later(problem, iter, prev_iter_end):
         blk = 1
   return blk
 
+
+def numbers2order(numbers):
+    # First, we need to convert the strings to floats while handling commas.
+    # We'll replace commas with periods to handle numbers like '12,0'
+    float_numbers = [float(num.replace(',', '.')) for num in numbers]
+
+    # Now we sort the float numbers and their indices based on value
+    sorted_indices = sorted(range(len(float_numbers)), key=lambda k: float_numbers[k], reverse=True)
+
+    # Create a list to store the relative sizes
+    result = [None] * len(float_numbers)
+
+    # Assign relative sizes based on sorted order, but give same rank to duplicates
+    rank = 0
+    prev_val = None
+    for idx in sorted_indices:
+        if float_numbers[idx] != prev_val:  # If the current value is different from the previous one, increase the rank
+            rank += 1
+        result[idx] = ORDER[rank - 1]  # Assign the current rank to the original index
+        prev_val = float_numbers[idx]  # Update the previous value
+
+    return result
+
+
 class Problem:
+
     def __init__(self, problem: str, numbers: list[str], equation: Equation):
         self.context = None
         self.question = None
         self.numbers = numbers
+        self.order = numbers2order(numbers)
         self.same_number_idx = getSameNumberIdx(numbers)
         self.equation = equation.getList()
         self.golden_op = equation.getOperator()

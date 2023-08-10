@@ -14,6 +14,8 @@ from dataclasses import dataclass
 
 from typing import List
 
+from utils import ORDER
+
 BASE_PATH = Path(__file__).parent.parent
 
 
@@ -37,6 +39,7 @@ class Problem:
     context: str
     question: str
     numbers: list[str]
+    order : list[str]
     same_number_idx: list[list[int]]
     equation: list[list[str]]
     golden_op: list[str]
@@ -76,12 +79,21 @@ class Dataset(data.Dataset):
         # witiko/mathberta, use 'Ġ' as space, exclude 2 of beggining and end.
         elif self.pretrained_model_name in ["wikito/mathberta"]:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-2]
-                # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
-            # exclude 1 beggining(<s>) and 2 end(Ġ, <\s>).
+        # roberta use 'Ġ' as space, but only concatenated in front of other tokens, or at the end independantly
+        # exclude 1 beggining(<s>) and 2 end(Ġ, <\s>).
         elif self.pretrained_model_name in ["microsoft/deberta-v3-large", "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-base"]:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][2:-1]
         else:
             self.quant_list_ids = self.tokenizer(" <quant> ", return_tensors="pt").input_ids[0][1:-2]
+
+        if self.pretrained_model_name in ["AnReu/math_pretrained_bert"]:
+            self.order_ids = [self.tokenizer(ORDER[i], return_tensors="pt").input_ids[0][1:-1] for i in range(len(ORDER))]
+        elif self.pretrained_model_name in ["wikito/mathberta"]:
+            self.order_ids = [self.tokenizer(ORDER[i], return_tensors="pt").input_ids[0][2:-2] for i in range(len(ORDER))]
+        elif self.pretrained_model_name in ["microsoft/deberta-v3-large", "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-base"]:
+            self.order_ids = [self.tokenizer(ORDER[i], return_tensors="pt").input_ids[0][2:-1] for i in range(len(ORDER))]
+        else:
+            self.order_ids = [self.tokenizer(ORDER[i], return_tensors="pt").input_ids[0][1:-2] for i in range(len(ORDER))]
 
         self.features = []
         for problem_dict in tqdm(self.orig_dataset, desc="Converting Problem to Features "):
@@ -91,9 +103,10 @@ class Dataset(data.Dataset):
 
     def _convert_to_feature(self, problem: Problem) -> Feature:
         # ~~~~ number0 ~~~~ number2 ~~~~~~~ 문장을
-        # ~~~~ <quant> ~~~~ <quant> ~~~~~~~ 로 치환
-        problem_question = self._num2quent(problem.question)
-        problem_context = self._num2quent(problem.context)
+        # ~~~~ <first> ~~~~ <second> ~~~~~~~ 로 치환
+        ind = 0 # index recording the numbers that occured in question part
+        problem_question, ind = self._num2order(problem.question, problem.order, ind)
+        problem_context, ind = self._num2order(problem.context, problem.order, ind)
 
         # tokenize
         tokenized_problem = self.tokenizer(problem_context, problem_question, return_tensors="pt").input_ids
@@ -105,6 +118,7 @@ class Dataset(data.Dataset):
                                                                                           tokenized_context,
                                                                                           number_tensors,
                                                                                           self.quant_list_ids,
+                                                                                          self.order_ids,
                                                                                           self.pretrained_model_name)
         assert num_count == len(number_tensors), "number의 개수가 맞지 않음 {} != {}\n" \
                                                  "number list : {}\n" \
@@ -150,7 +164,7 @@ class Dataset(data.Dataset):
                        equation_mask=equation_mask)
 
     @staticmethod
-    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None, model_name=None):
+    def _translate2number(tokenized_problem, tokenized_context, number_tensors, quant_list_ids=None, order_ids = None, model_name=None):
         # AnReu/math_pretrained_bert only uses [SEP] once between sentences
         if model_name == "AnReu/math_pretrained_bert":
             tokenized_problem = torch.cat(
@@ -172,7 +186,8 @@ class Dataset(data.Dataset):
         num_count = 0
         cur = 0
         while cur < len(tokenized_problem[0]) - len(quant_list_ids) + 1:
-            if torch.equal(tokenized_problem[0][cur:cur + len(quant_list_ids)], quant_list_ids):
+            end_index = min(cur + len(quant_list_ids), len(tokenized_problem[0]))
+            if torch.equal(tokenized_problem[0][cur:end_index], quant_list_ids):
                 # number_mask에 숫자의 등장순서에 따라 1,2,3으로 마스킹
                 number_mask = torch.cat([number_mask[:, :cur],
                                          torch.full(number_tensors[num_count].shape, num_count + 1),
@@ -188,6 +203,28 @@ class Dataset(data.Dataset):
 
                 cur += len(number_tensors[num_count][0]) - len(quant_list_ids)
                 num_count += 1
+            # if tokenized_problem[0][cur:cur + len(quant_list_ids)] is in one of order_ids
+            # number_mask에 숫자의 등장순서에 따라 1,2,3으로 마스킹
+            else:
+                for order_id in order_ids:
+                    end_index = min(cur + len(order_id), len(tokenized_problem[0]))
+                    if torch.equal(tokenized_problem[0][cur:end_index], order_id):
+                        # number_mask에 숫자의 등장순서에 따라 1,2,3으로 마스킹
+                        number_mask = torch.cat([number_mask[:, :cur],
+                                                 torch.full(number_tensors[num_count].shape, num_count + 1),
+                                                 number_mask[:, cur + len(order_id):]], dim=1)
+                        # question_mask 사이즈 조정
+                        question_mask = torch.cat([question_mask[:, :cur],
+                                                   torch.full(number_tensors[num_count].shape, question_mask[0, cur]),
+                                                   question_mask[:, cur + len(order_id):]], dim=1)
+                        # number_tensors로 치환
+                        tokenized_problem = torch.cat([tokenized_problem[:, :cur],
+                                                       number_tensors[num_count],
+                                                       tokenized_problem[:, cur + len(order_id):]], dim=1)
+
+                        cur += len(number_tensors[num_count][0]) - len(order_id)
+                        num_count += 1
+                        break
             cur += 1
 
         return tokenized_problem, question_mask, number_mask, num_count
@@ -212,6 +249,29 @@ class Dataset(data.Dataset):
             append_idx = append_idx + len("<quant>") - len(find_number.group())
 
         return problem_text
+
+    @staticmethod
+    def _num2order(problem_text: str, order : list[str], ind : int):
+        # Find number00 like strings and replace them with <first>, <second>, <third>, ...
+        append_idx = 0
+        for find_number in re.finditer("number\d+", problem_text):
+            if find_number.start() == 0:
+                problem_text = " " + problem_text
+                append_idx += 1
+
+            if find_number.end() + append_idx >= len(problem_text):
+                problem_text = problem_text + " "
+
+            #order[ind][1:-1] is " <first> " -> "<first>", slice empty space
+            l_space = "" if problem_text[find_number.start() + append_idx - 1] == " " else " "
+            r_space = "" if problem_text[find_number.end() + append_idx] == " " else " "
+            problem_text = problem_text[:find_number.start() + append_idx] + l_space + order[ind][1:-1] + r_space + \
+                           problem_text[find_number.end() + append_idx:]
+
+            append_idx = append_idx + len(order[ind][1:-1]) - len(find_number.group())
+            ind += 1
+
+        return problem_text, ind
 
     def _convert_equation_label(self, equation: list[list[str]]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # maximum arity of equation: max(operands + 1(operator), for all equation[i])
